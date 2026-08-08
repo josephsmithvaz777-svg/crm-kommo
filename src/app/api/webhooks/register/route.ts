@@ -3,6 +3,13 @@ import { kommoApi } from "@/lib/kommo/client";
 import { RECOMMENDED_WEBHOOK_SETTINGS } from "@/lib/sync/webhooks";
 import { kommoConfig } from "@/lib/kommo/config";
 
+function sanitizeBaseUrl(raw: string) {
+  let base = raw.trim().replace(/^["']|["']$/g, "").replace(/\/$/, "");
+  // Si pegaron la URL completa del webhook por error, recortar
+  base = base.replace(/\/api\/webhooks\/kommo.*$/i, "");
+  return base;
+}
+
 export async function GET() {
   try {
     const data = await kommoApi.listWebhooks();
@@ -15,26 +22,39 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => ({}))) as { destination?: string };
-    const base = (process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin).replace(/\/$/, "");
-    let destination = (body.destination || `${base}/api/webhooks/kommo`).trim();
+    const body = (await req.json().catch(() => ({}))) as { destination?: string; baseUrl?: string };
 
-    if (!destination.startsWith("https://")) {
+    const rawBase =
+      body.baseUrl ||
+      body.destination ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      req.nextUrl.origin;
+
+    const base = sanitizeBaseUrl(rawBase);
+    let destination = body.destination?.includes("/api/webhooks/kommo")
+      ? sanitizeBaseUrl(body.destination.replace(/\/api\/webhooks\/kommo.*$/i, "")) +
+        "/api/webhooks/kommo"
+      : `${base}/api/webhooks/kommo`;
+
+    destination = destination.trim().replace(/^["']|["']$/g, "");
+
+    if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(destination)) {
       return NextResponse.json(
         {
           error:
-            "La URL del webhook debe ser HTTPS pública (Vercel). Revisa NEXT_PUBLIC_APP_URL=https://crm-kommo.vercel.app",
+            "URL inválida para Kommo. Debe ser HTTPS público, ej: https://crm-kommo.vercel.app/api/webhooks/kommo",
           destination,
+          hint: "En Vercel: NEXT_PUBLIC_APP_URL=https://crm-kommo.vercel.app (sin comillas)",
         },
         { status: 400 },
       );
     }
 
-    if (destination.includes("localhost")) {
+    if (/localhost|127\.0\.0\.1|example\.com/i.test(destination)) {
       return NextResponse.json(
         {
           error:
-            "No uses localhost. En Vercel pon NEXT_PUBLIC_APP_URL=https://crm-kommo.vercel.app y vuelve a registrar.",
+            "La URL no puede ser localhost ni example.com. Usa https://crm-kommo.vercel.app",
           destination,
         },
         { status: 400 },

@@ -53,10 +53,15 @@ export function SyncPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/webhooks/register", { method: "POST" });
+      const res = await fetch("/api/webhooks/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Usa el dominio actual (Vercel) para no depender de un .env mal pegado
+        body: JSON.stringify({ baseUrl: window.location.origin }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudieron registrar webhooks");
-      alert(`Webhooks registrados en: ${data.destination}`);
+      alert(`Webhooks registrados en:\n${data.destination}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
