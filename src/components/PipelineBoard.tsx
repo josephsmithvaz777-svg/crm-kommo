@@ -78,6 +78,14 @@ export function PipelineBoard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo mover el lead");
+      if (data.warning) setError(data.warning);
+      if (data.lead?.stageId) {
+        setLeads((list) =>
+          list.map((l) =>
+            l.id === leadId ? { ...l, stageId: data.lead.stageId } : l,
+          ),
+        );
+      }
     } catch (e) {
       setLeads((list) => list.map((l) => (l.id === leadId ? { ...l, stageId: prev } : l)));
       setError(e instanceof Error ? e.message : "Error al mover");

@@ -3,6 +3,7 @@ import { getSession, leadScopeWhere } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { kommoApi } from "@/lib/kommo/client";
 import { assignLeadToUser } from "@/lib/assignment";
+import { syncPipelines } from "@/lib/sync/migrate";
 
 export async function PATCH(
   req: NextRequest,
@@ -22,7 +23,6 @@ export async function PATCH(
     responsibleId?: string | null;
   };
 
-  // Reasignar asesor: solo admin (o setup)
   if (body.responsibleId !== undefined) {
     const isAdmin =
       process.env.AUTH_SETUP_OPEN === "true" || session?.role === "admin";
@@ -61,45 +61,104 @@ export async function PATCH(
 
   let stageKommoId: number | undefined;
   let pipelineKommoId: number | undefined;
+  let nextStageId = body.stageId;
+  let nextPipelineId = body.pipelineId;
   let status = lead.status;
 
   if (body.stageId) {
-    const stage = await prisma.stage.findUnique({ where: { id: body.stageId } });
+    // Usar siempre el embudo de la etapa (evita status_id inválido)
+    let stage = await prisma.stage.findUnique({
+      where: { id: body.stageId },
+      include: { pipeline: true },
+    });
+
     if (!stage) {
       return NextResponse.json({ error: "Etapa inválida" }, { status: 400 });
     }
+
+    // Refrescar embudos desde Kommo por si los IDs cambiaron
+    try {
+      await syncPipelines();
+      const refreshed = await prisma.stage.findUnique({
+        where: { id: body.stageId },
+        include: { pipeline: true },
+      });
+      if (refreshed) stage = refreshed;
+    } catch {
+      // seguir con datos locales
+    }
+
     stageKommoId = stage.kommoId;
+    pipelineKommoId = stage.pipeline.kommoId;
+    nextStageId = stage.id;
+    nextPipelineId = stage.pipelineId;
+
     if (stage.isWon) status = "won";
     else if (stage.isLost) status = "lost";
     else status = "active";
-  }
-
-  if (body.pipelineId) {
+  } else if (body.pipelineId) {
     const pipeline = await prisma.pipeline.findUnique({ where: { id: body.pipelineId } });
     if (!pipeline) {
       return NextResponse.json({ error: "Embudo inválido" }, { status: 400 });
     }
     pipelineKommoId = pipeline.kommoId;
+    nextPipelineId = pipeline.id;
+  }
+
+  // Confirmar pipeline real del lead en Kommo si solo movemos etapa
+  if (stageKommoId !== undefined && pipelineKommoId === undefined) {
+    try {
+      const remote = await kommoApi.getLead(lead.kommoId);
+      if (remote.pipeline_id) pipelineKommoId = remote.pipeline_id;
+    } catch {
+      // ignore
+    }
   }
 
   try {
-    await kommoApi.updateLead({
-      id: lead.kommoId,
-      ...(stageKommoId !== undefined ? { status_id: stageKommoId } : {}),
-      ...(pipelineKommoId !== undefined ? { pipeline_id: pipelineKommoId } : {}),
-      ...(body.name !== undefined ? { name: body.name } : {}),
-      ...(body.price !== undefined ? { price: body.price } : {}),
-    });
+    const payload: {
+      id: number;
+      status_id?: number;
+      pipeline_id?: number;
+      name?: string;
+      price?: number;
+    } = { id: lead.kommoId };
+
+    if (stageKommoId !== undefined) payload.status_id = stageKommoId;
+    if (pipelineKommoId !== undefined) payload.pipeline_id = pipelineKommoId;
+    if (body.name !== undefined) payload.name = body.name;
+    if (body.price !== undefined) payload.price = body.price;
+
+    await kommoApi.updateLead(payload);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error Kommo";
-    return NextResponse.json({ error: `No se pudo actualizar en Kommo: ${message}` }, { status: 400 });
+    // Actualizar igual en CRM local para que el agente no se quede bloqueado
+    const updatedLocal = await prisma.lead.update({
+      where: { id: lead.id },
+      data: {
+        ...(nextStageId ? { stageId: nextStageId } : {}),
+        ...(nextPipelineId ? { pipelineId: nextPipelineId } : {}),
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.price !== undefined ? { price: body.price } : {}),
+        status,
+      },
+      include: { stage: true, pipeline: true, responsible: true },
+    });
+
+    return NextResponse.json(
+      {
+        lead: updatedLocal,
+        warning: `Guardado en ConexiónCRM, pero Kommo rechazó el cambio: ${message}. Ejecuta Migración completa para refrescar etapas.`,
+      },
+      { status: 200 },
+    );
   }
 
   const updated = await prisma.lead.update({
     where: { id: lead.id },
     data: {
-      ...(body.stageId ? { stageId: body.stageId } : {}),
-      ...(body.pipelineId ? { pipelineId: body.pipelineId } : {}),
+      ...(nextStageId ? { stageId: nextStageId } : {}),
+      ...(nextPipelineId ? { pipelineId: nextPipelineId } : {}),
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.price !== undefined ? { price: body.price } : {}),
       status,
