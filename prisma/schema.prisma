@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model KommoAccount {
+  id           String   @id @default(cuid())
+  subdomain    String   @unique
+  accountId    Int?
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Pipeline {
+  id        String   @id @default(cuid())
+  kommoId   Int      @unique
+  name      String
+  isMain    Boolean  @default(false)
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  stages    Stage[]
+  leads     Lead[]
+}
+
+model Stage {
+  id         String   @id @default(cuid())
+  kommoId    Int      @unique
+  pipelineId String
+  name       String
+  sort       Int      @default(0)
+  color      String?
+  isWon      Boolean  @default(false)
+  isLost     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  pipeline   Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  leads      Lead[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  kommoId      Int      @unique
+  name         String
+  email        String?
+  passwordHash String?
+  role         String   @default("agent") // admin | agent
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  leads        Lead[]   @relation("ResponsibleLeads")
+  contacts     Contact[] @relation("ResponsibleContacts")
+  companies    Company[] @relation("ResponsibleCompanies")
+  tasks        Task[]   @relation("ResponsibleTasks")
+}
+
+model Company {
+  id             String    @id @default(cuid())
+  kommoId        Int       @unique
+  name           String
+  responsibleId  String?
+  customFields   String? // JSON
+  kommoCreatedAt DateTime?
+  kommoUpdatedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  responsible    User?     @relation("ResponsibleCompanies", fields: [responsibleId], references: [id])
+  contacts       Contact[]
+  leads          Lead[]
+}
+
+model Contact {
+  id             String    @id @default(cuid())
+  kommoId        Int       @unique
+  name           String
+  firstName      String?
+  lastName       String?
+  phone          String?
+  email          String?
+  companyId      String?
+  responsibleId  String?
+  tags           String? // JSON array
+  customFields   String? // JSON
+  kommoCreatedAt DateTime?
+  kommoUpdatedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  company        Company?  @relation(fields: [companyId], references: [id])
+  responsible    User?     @relation("ResponsibleContacts", fields: [responsibleId], references: [id])
+  leads          LeadContact[]
+  notes          Note[]
+}
+
+model Lead {
+  id             String    @id @default(cuid())
+  kommoId        Int       @unique
+  name           String
+  price          Float     @default(0)
+  status         String    @default("active") // active | won | lost | deleted
+  pipelineId     String?
+  stageId        String?
+  responsibleId  String?
+  companyId      String?
+  source         String?
+  tags           String? // JSON array
+  customFields   String? // JSON
+  lossReason     String?
+  kommoCreatedAt DateTime?
+  kommoUpdatedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  pipeline       Pipeline? @relation(fields: [pipelineId], references: [id])
+  stage          Stage?    @relation(fields: [stageId], references: [id])
+  responsible    User?     @relation("ResponsibleLeads", fields: [responsibleId], references: [id])
+  company        Company?  @relation(fields: [companyId], references: [id])
+  contacts       LeadContact[]
+  notes          Note[]
+  tasks          Task[]
+}
+
+model LeadContact {
+  leadId    String
+  contactId String
+  isPrimary Boolean @default(false)
+
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, contactId])
+}
+
+model Note {
+  id             String    @id @default(cuid())
+  kommoId        Int       @unique
+  entityType     String // lead | contact | company
+  leadId         String?
+  contactId      String?
+  noteType       String?
+  text           String?
+  params         String? // JSON
+  kommoCreatedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contact        Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id             String    @id @default(cuid())
+  kommoId        Int       @unique
+  text           String?
+  entityType     String? // leads | contacts | companies
+  leadId         String?
+  responsibleId  String?
+  isCompleted    Boolean   @default(false)
+  completeTill   DateTime?
+  taskTypeId     Int?
+  kommoCreatedAt DateTime?
+  kommoUpdatedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  responsible    User?     @relation("ResponsibleTasks", fields: [responsibleId], references: [id])
+}
+
+model CustomField {
+  id         String   @id @default(cuid())
+  kommoId    Int      @unique
+  name       String
+  entityType String // leads | contacts | companies
+  fieldType  String?
+  code       String?
+  enums      String? // JSON
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Tag {
+  id         String   @id @default(cuid())
+  kommoId    Int?
+  name       String
+  entityType String // leads | contacts
+  color      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([name, entityType])
+}
+
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  event     String
+  payload   String // JSON
+  processed Boolean  @default(false)
+  error     String?
+  createdAt DateTime @default(now())
+}
+
+model SyncJob {
+  id          String    @id @default(cuid())
+  type        String // full | incremental | entity
+  entity      String?
+  status      String    @default("pending") // pending | running | completed | failed
+  progress    Int       @default(0)
+  total       Int       @default(0)
+  message     String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
