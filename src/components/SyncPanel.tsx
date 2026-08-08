@@ -34,12 +34,21 @@ export function SyncPanel() {
     return () => clearInterval(id);
   }, []);
 
-  async function startSync() {
+  async function startSync(force = false) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/sync", { method: "POST" });
+      const res = await fetch(`/api/sync${force ? "?force=1" : ""}`, { method: "POST" });
       const data = await res.json();
+      if (res.status === 409) {
+        // Job colgado: cancelar y reintentar
+        await fetch("/api/sync", { method: "DELETE" });
+        const retry = await fetch("/api/sync?force=1", { method: "POST" });
+        const retryData = await retry.json();
+        if (!retry.ok) throw new Error(retryData.error || "No se pudo reiniciar");
+        await load();
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "No se pudo iniciar");
       await load();
     } catch (e) {
@@ -138,11 +147,26 @@ export function SyncPanel() {
             <button
               type="button"
               disabled={!status.connected || busy}
-              onClick={startSync}
+              onClick={() => startSync(false)}
               className="rounded-lg bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
             >
               Migración completa
             </button>
+            {status.lastJob?.status === "running" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  await fetch("/api/sync", { method: "DELETE" });
+                  await load();
+                  setBusy(false);
+                }}
+                className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-800"
+              >
+                Cancelar sync
+              </button>
+            )}
             <button
               type="button"
               disabled={!status.connected || busy}

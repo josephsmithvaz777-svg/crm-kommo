@@ -3,6 +3,20 @@ import { getKommoConnectionStatus } from "@/lib/kommo/oauth";
 import { prisma } from "@/lib/db";
 
 export async function GET() {
+  // Desbloquear migraciones colgadas en Vercel (>2 min)
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000);
+  await prisma.syncJob.updateMany({
+    where: {
+      status: { in: ["running", "pending"] },
+      OR: [{ startedAt: { lt: cutoff } }, { startedAt: null, createdAt: { lt: cutoff } }],
+    },
+    data: {
+      status: "failed",
+      message: "Interrumpido (timeout en Vercel). Pulsa Migración completa otra vez.",
+      finishedAt: new Date(),
+    },
+  });
+
   const status = await getKommoConnectionStatus();
   const counts = {
     leads: await prisma.lead.count({ where: { deletedAt: null } }),
