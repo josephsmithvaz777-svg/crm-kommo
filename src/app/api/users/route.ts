@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, hashPassword, requireSession } from "@/lib/auth";
+import { getSession, hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+
+function setupOpen() {
+  return process.env.AUTH_SETUP_OPEN === "true";
+}
 
 export async function GET() {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const open = setupOpen();
+
+  if (!session && !open) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
 
   const users = await prisma.user.findMany({
-    where: session.role === "admin" ? {} : { id: session.id },
+    where:
+      !session || session.role === "admin" || open
+        ? {}
+        : { id: session.id },
     select: {
       id: true,
       name: true,
@@ -29,11 +40,13 @@ export async function GET() {
   });
 }
 
-/** Admin: asigna contraseña / rol a un asesor sincronizado desde Kommo */
+/** Admin (o modo instalación): asigna contraseña / rol */
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await requireSession();
-    if (session.role !== "admin") {
+    const session = await getSession();
+    const open = setupOpen();
+
+    if (!open && (!session || session.role !== "admin")) {
       return NextResponse.json({ error: "Solo admin" }, { status: 403 });
     }
 
@@ -66,7 +79,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ user });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error";
-    const status = message === "UNAUTHORIZED" ? 401 : 400;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
