@@ -160,6 +160,9 @@ export async function upsertLead(l: KommoLead) {
     });
   }
 
+  const existing = await prisma.lead.findUnique({ where: { kommoId: l.id } });
+  const keepCrmOwner = Boolean(existing?.crmAssigned);
+
   const lead = await prisma.lead.upsert({
     where: { kommoId: l.id },
     create: {
@@ -175,6 +178,7 @@ export async function upsertLead(l: KommoLead) {
       tags: tagsToJson(l._embedded?.tags),
       customFields: customFieldsToJson(l.custom_fields_values),
       lossReason: l.loss_reason?.name || null,
+      crmAssigned: false,
       kommoCreatedAt: ts(l.created_at),
       kommoUpdatedAt: ts(l.updated_at),
       deletedAt: null,
@@ -185,7 +189,8 @@ export async function upsertLead(l: KommoLead) {
       status,
       pipelineId: pipeline?.id,
       stageId: stage?.id,
-      responsibleId: responsible?.id,
+      // No pisar el asesor si ConexiónCRM ya lo repartió
+      ...(keepCrmOwner ? {} : { responsibleId: responsible?.id }),
       companyId: company?.id,
       source: l._embedded?.source?.name || null,
       tags: tagsToJson(l._embedded?.tags),
@@ -211,6 +216,13 @@ export async function upsertLead(l: KommoLead) {
       },
       update: { isPrimary: Boolean(c.is_main) },
     });
+  }
+
+  // Lead nuevo → round-robin local (no requiere licencia Kommo extra)
+  if (!existing) {
+    const { autoAssignNewLead } = await import("@/lib/assignment");
+    const assigned = await autoAssignNewLead(lead.id);
+    return assigned || lead;
   }
 
   return lead;

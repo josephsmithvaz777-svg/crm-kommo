@@ -9,6 +9,7 @@ const links = [
   { href: "/chat", label: "Chat" },
   { href: "/contactos", label: "Contactos" },
   { href: "/equipo", label: "Equipo" },
+  { href: "/reparto", label: "Reparto" },
   { href: "/configuracion", label: "Kommo" },
 ];
 

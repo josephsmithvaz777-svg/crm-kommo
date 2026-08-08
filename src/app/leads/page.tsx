@@ -2,12 +2,16 @@ import { prisma } from "@/lib/db";
 import { getSession, leadScopeWhere } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { LeadAssignSelect } from "@/components/LeadAssignSelect";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeadsPage() {
   const session = await getSession();
   if (!session && process.env.AUTH_SETUP_OPEN !== "true") redirect("/login");
+
+  const isAdmin =
+    process.env.AUTH_SETUP_OPEN === "true" || session?.role === "admin";
 
   const leads = await prisma.lead.findMany({
     where: {
@@ -24,6 +28,14 @@ export default async function LeadsPage() {
     take: 100,
   });
 
+  const assignees = isAdmin
+    ? await prisma.user.findMany({
+        where: { isActive: true, passwordHash: { not: null } },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      })
+    : [];
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -34,7 +46,7 @@ export default async function LeadsPage() {
           <p className="mt-1 text-sm text-[var(--muted)]">
             {session?.role === "agent"
               ? `Tus leads asignados (${leads.length})`
-              : `${leads.length} registros recientes`}
+              : `${leads.length} registros · reparto en /reparto`}
           </p>
         </div>
       </div>
@@ -57,7 +69,15 @@ export default async function LeadsPage() {
                 <td className="px-4 py-3 font-medium text-[var(--ink)]">{lead.name}</td>
                 <td className="px-4 py-3 text-[var(--muted)]">{lead.stage?.name || "—"}</td>
                 <td className="px-4 py-3 text-[var(--muted)]">
-                  {lead.responsible?.name || "—"}
+                  {isAdmin ? (
+                    <LeadAssignSelect
+                      leadId={lead.id}
+                      currentId={lead.responsibleId}
+                      users={assignees}
+                    />
+                  ) : (
+                    lead.responsible?.name || "—"
+                  )}
                 </td>
                 <td className="px-4 py-3 text-[var(--muted)]">{lead.source || "—"}</td>
                 <td className="px-4 py-3 text-[var(--ink)]">
@@ -73,7 +93,7 @@ export default async function LeadsPage() {
             {!leads.length && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-[var(--muted)]">
-                  Sin leads. Ejecuta la migración o espera asignación en Kommo.
+                  Sin leads. Ejecuta la migración o espera webhooks / reparto.
                 </td>
               </tr>
             )}
