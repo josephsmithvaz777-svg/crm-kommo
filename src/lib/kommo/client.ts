@@ -111,6 +111,19 @@ export const kommoApi = {
   getLead: (id: number) =>
     kommoFetch<KommoLead>(`/leads/${id}?with=contacts,loss_reason,source_id`),
 
+  updateLead: (payload: {
+    id: number;
+    status_id?: number;
+    pipeline_id?: number;
+    name?: string;
+    price?: number;
+    responsible_user_id?: number;
+  }) =>
+    kommoFetch("/leads", {
+      method: "PATCH",
+      body: JSON.stringify([payload]),
+    }),
+
   getContacts: (onPage?: (items: KommoContact[], page: number) => Promise<void> | void) =>
     fetchAllPages<KommoContact>("/contacts?with=leads", "contacts", 250, onPage),
 

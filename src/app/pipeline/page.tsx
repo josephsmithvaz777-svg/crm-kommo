@@ -8,7 +8,7 @@ export default function PipelinePage() {
           Embudos
         </h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Etapas sincronizadas desde Kommo. Arrastra visualmente por columnas.
+          Arrastra leads entre etapas o usa el selector. El cambio se sincroniza con Kommo.
         </p>
       </div>
       <PipelineBoard />
