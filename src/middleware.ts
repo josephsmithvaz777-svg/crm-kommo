@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-import { PrismaClient } from "@prisma/client";
 
 const PUBLIC = [
   "/login",
@@ -10,11 +9,22 @@ const PUBLIC = [
   "/api/kommo/oauth",
 ];
 
-// Prisma en middleware Edge no siempre funciona; usamos cookie/session y
-// rutas de setup públicas controladas por AUTH_SETUP_OPEN.
+const ADMIN_ONLY_PATHS = [
+  "/equipo",
+  "/reparto",
+  "/configuracion",
+  "/api/assignment",
+  "/api/sync",
+  "/api/users",
+  "/api/webhooks/register",
+];
 
 function isPublic(pathname: string) {
   return PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isAdminOnly(pathname: string) {
+  return ADMIN_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 export async function middleware(req: NextRequest) {
@@ -29,7 +39,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Modo instalación: permite configurar hasta crear el primer admin
   if (process.env.AUTH_SETUP_OPEN === "true") {
     return NextResponse.next();
   }
@@ -48,7 +57,18 @@ export async function middleware(req: NextRequest) {
   try {
     const secret =
       process.env.AUTH_SECRET || process.env.KOMMO_CLIENT_SECRET || "dev-secret-change-me";
-    await jwtVerify(token, new TextEncoder().encode(secret));
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
+    const role = payload.role === "admin" ? "admin" : "agent";
+
+    if (role !== "admin" && isAdminOnly(pathname)) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Solo admin" }, { status: 403 });
+      }
+      const url = req.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+
     return NextResponse.next();
   } catch {
     if (pathname.startsWith("/api/")) {

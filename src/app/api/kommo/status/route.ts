@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getKommoConnectionStatus } from "@/lib/kommo/oauth";
 import { prisma } from "@/lib/db";
+import { contactScopeWhere, getSession, leadScopeWhere } from "@/lib/auth";
 
 export async function GET() {
-  // Desbloquear migraciones colgadas en Vercel (>2 min)
   const cutoff = new Date(Date.now() - 2 * 60 * 1000);
   await prisma.syncJob.updateMany({
     where: {
@@ -17,18 +17,37 @@ export async function GET() {
     },
   });
 
+  const session = await getSession();
   const status = await getKommoConnectionStatus();
+
+  const leadWhere = {
+    deletedAt: null as null,
+    ...(session ? leadScopeWhere(session) : {}),
+  };
+  const contactWhere = {
+    deletedAt: null as null,
+    ...(session ? contactScopeWhere(session) : {}),
+  };
+
   const counts = {
-    leads: await prisma.lead.count({ where: { deletedAt: null } }),
-    contacts: await prisma.contact.count({ where: { deletedAt: null } }),
-    companies: await prisma.company.count({ where: { deletedAt: null } }),
-    tasks: await prisma.task.count(),
-    notes: await prisma.note.count(),
-    users: await prisma.user.count(),
+    leads: await prisma.lead.count({ where: leadWhere }),
+    contacts: await prisma.contact.count({ where: contactWhere }),
+    companies:
+      session?.role === "agent"
+        ? 0
+        : await prisma.company.count({ where: { deletedAt: null } }),
+    tasks: session?.role === "agent" ? 0 : await prisma.task.count(),
+    notes: session?.role === "agent" ? 0 : await prisma.note.count(),
+    users: session?.role === "agent" ? 1 : await prisma.user.count(),
     pipelines: await prisma.pipeline.count(),
   };
 
   const lastJob = await prisma.syncJob.findFirst({ orderBy: { createdAt: "desc" } });
 
-  return NextResponse.json({ ...status, counts, lastJob });
+  return NextResponse.json({
+    ...status,
+    counts,
+    lastJob,
+    user: session,
+  });
 }

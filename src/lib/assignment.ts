@@ -58,7 +58,7 @@ export async function pickNextAssignee() {
 }
 
 export async function assignLeadToUser(leadId: string, userId: string) {
-  return prisma.lead.update({
+  const lead = await prisma.lead.update({
     where: { id: leadId },
     data: {
       responsibleId: userId,
@@ -66,6 +66,20 @@ export async function assignLeadToUser(leadId: string, userId: string) {
     },
     include: { responsible: true },
   });
+
+  // Propagar asesor a contactos del lead (para que el agente los vea)
+  const links = await prisma.leadContact.findMany({
+    where: { leadId },
+    select: { contactId: true },
+  });
+  if (links.length) {
+    await prisma.contact.updateMany({
+      where: { id: { in: links.map((l) => l.contactId) } },
+      data: { responsibleId: userId },
+    });
+  }
+
+  return lead;
 }
 
 /** Asigna un lead nuevo si el auto-reparto está activo y hay pool */

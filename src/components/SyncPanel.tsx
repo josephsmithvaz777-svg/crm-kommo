@@ -14,6 +14,7 @@ type Status = {
     progress: number;
     message: string | null;
   } | null;
+  user?: { role: string; name: string } | null;
 };
 
 export function SyncPanel() {
@@ -102,10 +103,15 @@ export function SyncPanel() {
     return <p className="text-sm text-[var(--muted)]">Cargando estado Kommo...</p>;
   }
 
+  const isAgent = status.user?.role === "agent";
+  const agentCountKeys = ["leads", "contacts"];
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Object.entries(status.counts || {}).map(([key, value]) => (
+        {Object.entries(status.counts || {})
+          .filter(([key]) => !isAgent || agentCountKeys.includes(key))
+          .map(([key, value]) => (
           <div key={key} className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4">
             <p className="text-xs uppercase tracking-wide text-[var(--muted)]">{key}</p>
             <p className="mt-1 font-[family-name:var(--font-display)] text-3xl text-[var(--ink)]">
@@ -115,6 +121,16 @@ export function SyncPanel() {
         ))}
       </div>
 
+      {isAgent ? (
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <h2 className="font-[family-name:var(--font-display)] text-xl text-[var(--ink)]">
+            Hola, {status.user?.name}
+          </h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Solo ves leads y contactos asignados a ti. Usa Embudos, Leads y Chat para trabajar.
+          </p>
+        </div>
+      ) : (
       <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -214,6 +230,7 @@ export function SyncPanel() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

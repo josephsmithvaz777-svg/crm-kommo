@@ -112,3 +112,23 @@ export function leadScopeWhere(session: SessionUser) {
   if (session.role === "admin") return {};
   return { responsibleId: session.id };
 }
+
+/** Contactos: propios o ligados a leads asignados al agente */
+export function contactScopeWhere(session: SessionUser) {
+  if (session.role === "admin") return {};
+  return {
+    OR: [
+      { responsibleId: session.id },
+      {
+        leads: {
+          some: {
+            lead: {
+              responsibleId: session.id,
+              deletedAt: null,
+            },
+          },
+        },
+      },
+    ],
+  };
+}
