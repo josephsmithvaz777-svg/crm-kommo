@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { processWebhookPayload } from "@/lib/sync/webhooks";
 import { kommoConfig } from "@/lib/kommo/config";
 
+/** Kommo a veces valida la URL con GET/HEAD antes de aceptar el webhook */
+export async function GET() {
+  return NextResponse.json({ ok: true, service: "conexioncrm-kommo-webhook" });
+}
+
+export async function HEAD() {
+  return new NextResponse(null, { status: 200 });
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (kommoConfig.webhookSecret) {
@@ -17,11 +26,9 @@ export async function POST(req: NextRequest) {
     if (contentType.includes("application/json")) {
       payload = (await req.json()) as Record<string, unknown>;
     } else {
-      // Kommo a menudo envía application/x-www-form-urlencoded
       const form = await req.formData();
       const raw: Record<string, unknown> = {};
       form.forEach((value, key) => {
-        // Soporta claves anidadas tipo leads[add][0][id]
         setNested(raw, key, value.toString());
       });
       payload = raw;
@@ -32,7 +39,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Webhook error";
     console.error("Webhook error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: message }, { status: 200 });
   }
 }
 

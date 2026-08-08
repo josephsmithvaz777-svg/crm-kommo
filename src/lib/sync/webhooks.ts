@@ -132,7 +132,6 @@ export const RECOMMENDED_WEBHOOK_SETTINGS = [
   "add_contact",
   "update_contact",
   "add_task",
-  "update_task",
   "add_talk",
   "add_message",
 ];
