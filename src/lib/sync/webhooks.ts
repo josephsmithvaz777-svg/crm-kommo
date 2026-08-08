@@ -128,8 +128,11 @@ export const RECOMMENDED_WEBHOOK_SETTINGS = [
   "status_lead",
   "delete_lead",
   "restore_lead",
+  "responsible_lead",
   "add_contact",
   "update_contact",
   "add_task",
   "update_task",
+  "add_talk",
+  "add_message",
 ];

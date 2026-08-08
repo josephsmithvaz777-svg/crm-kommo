@@ -156,7 +156,8 @@ export const kommoApi = {
   subscribeWebhook: (destination: string, settings: string[]) =>
     kommoFetch("/webhooks", {
       method: "POST",
-      body: JSON.stringify([{ destination, settings }]),
+      // Kommo espera un objeto, no un array (si no, error "Unexpected field: 0")
+      body: JSON.stringify({ destination, settings }),
     }),
 
   listWebhooks: () =>
