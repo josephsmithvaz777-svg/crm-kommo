@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { emitCrmAlert, unlockAlertAudio } from "@/lib/alert-sound";
 
 type Talk = {
   talk_id: number;
@@ -101,6 +102,10 @@ export function ChatWorkspace() {
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState(false);
   const talkIdRef = useRef<number | null>(null);
+  const messagesRef = useRef<Message[]>([]);
+  const selectedLeadIdRef = useRef("");
+  const inboxRef = useRef<InboxItem[]>([]);
+  const leadsRef = useRef<LeadOption[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickToBottom = useRef(true);
@@ -108,6 +113,28 @@ export function ChatWorkspace() {
   useEffect(() => {
     talkIdRef.current = talkId;
   }, [talkId]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    selectedLeadIdRef.current = selectedLeadId;
+  }, [selectedLeadId]);
+
+  useEffect(() => {
+    inboxRef.current = inbox;
+  }, [inbox]);
+
+  useEffect(() => {
+    leadsRef.current = leads;
+  }, [leads]);
+
+  useEffect(() => {
+    const unlock = () => unlockAlertAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
 
   async function loadInbox() {
     const res = await fetch("/api/chat");
@@ -137,7 +164,39 @@ export function ChatWorkspace() {
       }
       return;
     }
-    setMessages(sortMessagesAsc(data.messages || []));
+    const next = sortMessagesAsc(data.messages || []);
+    const prev = messagesRef.current;
+    if (prev.length > 0) {
+      const prevIds = new Set(prev.map((m) => m.id));
+      const realIncoming = next.filter(
+        (m) => !prevIds.has(m.id) && m.type === "incoming",
+      );
+      if (realIncoming.length > 0) {
+        const last = realIncoming[realIncoming.length - 1];
+        const leadId = selectedLeadIdRef.current;
+        const leadName =
+          inboxRef.current.find((i) => i.talk.talk_id === id)?.lead.name ||
+          leadsRef.current.find((l) => l.id === leadId)?.name ||
+          "Chat";
+        emitCrmAlert({
+          title: `Nuevo mensaje · ${leadName}`,
+          body: last.text || "Mensaje nuevo",
+          href: leadId ? `/chat?leadId=${leadId}` : "/chat",
+        });
+        if (leadId) {
+          void fetch("/api/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "message",
+              leadId,
+              body: last.text || `Nuevo mensaje de ${leadName}`,
+            }),
+          });
+        }
+      }
+    }
+    setMessages(next);
     if (!silent) setError(null);
     setLive(true);
   }
@@ -154,6 +213,7 @@ export function ChatWorkspace() {
       return;
     }
     stickToBottom.current = true;
+    messagesRef.current = [];
     void refreshMessages(false);
     const msgTimer = setInterval(() => void refreshMessages(true), 3000);
     return () => clearInterval(msgTimer);

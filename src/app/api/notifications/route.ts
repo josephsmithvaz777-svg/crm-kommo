@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   };
 
   if (body.type === "message" && body.leadId) {
-    await notifyLeadMessage(body.leadId, body.body);
+    await notifyLeadMessage(body.leadId, body.body, session.id);
     return NextResponse.json({ ok: true });
   }
 

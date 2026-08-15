@@ -35,7 +35,11 @@ export async function notifyUser(input: NotifyInput, dedupeSeconds = 45) {
   });
 }
 
-export async function notifyLeadMessage(leadId: string, preview?: string) {
+export async function notifyLeadMessage(
+  leadId: string,
+  preview?: string,
+  alsoUserId?: string | null,
+) {
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
     select: { id: true, name: true, responsibleId: true },
@@ -46,31 +50,30 @@ export async function notifyLeadMessage(leadId: string, preview?: string) {
   const body = preview || "Tienes un mensaje nuevo en el chat";
   const href = `/chat?leadId=${lead.id}`;
 
-  if (lead.responsibleId) {
-    await notifyUser({
-      userId: lead.responsibleId,
-      type: "message",
-      title,
-      body,
-      href,
-      leadId: lead.id,
+  const targets = new Set<string>();
+  if (lead.responsibleId) targets.add(lead.responsibleId);
+  if (alsoUserId) targets.add(alsoUserId);
+
+  if (!targets.size) {
+    const admins = await prisma.user.findMany({
+      where: { role: "admin", isActive: true },
+      select: { id: true },
     });
-    return;
+    for (const admin of admins) targets.add(admin.id);
   }
 
-  const admins = await prisma.user.findMany({
-    where: { role: "admin", isActive: true },
-    select: { id: true },
-  });
-  for (const admin of admins) {
-    await notifyUser({
-      userId: admin.id,
-      type: "message",
-      title,
-      body,
-      href,
-      leadId: lead.id,
-    });
+  for (const userId of targets) {
+    await notifyUser(
+      {
+        userId,
+        type: "message",
+        title,
+        body,
+        href,
+        leadId: lead.id,
+      },
+      15,
+    );
   }
 }
 

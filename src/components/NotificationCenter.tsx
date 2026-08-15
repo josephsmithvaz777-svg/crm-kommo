@@ -2,6 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import {
+  isAlertSoundOn,
+  playAlertSound,
+  setAlertSoundOn,
+  unlockAlertAudio,
+  type CrmAlertDetail,
+} from "@/lib/alert-sound";
 
 type Notif = {
   id: string;
@@ -16,42 +23,6 @@ type Notif = {
 
 type Toast = { id: string; title: string; body?: string; href?: string };
 
-const SOUND_KEY = "crm_alert_sound";
-
-/** Beep corto sin archivo externo (Web Audio API) */
-function playAlertSound() {
-  if (typeof window === "undefined") return;
-  if (localStorage.getItem(SOUND_KEY) === "off") return;
-  try {
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new Ctx();
-    const now = ctx.currentTime;
-
-    const beep = (freq: number, start: number, dur: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, now + start);
-      gain.gain.exponentialRampToValueAtTime(0.18, now + start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now + start);
-      osc.stop(now + start + dur + 0.02);
-    };
-
-    beep(880, 0, 0.12);
-    beep(1175, 0.14, 0.16);
-
-    setTimeout(() => void ctx.close(), 600);
-  } catch {
-    // ignore autoplay blocks until user interacts
-  }
-}
-
 export function NotificationCenter() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notif[]>([]);
@@ -64,7 +35,7 @@ export function NotificationCenter() {
   const bootstrapped = useRef(false);
 
   useEffect(() => {
-    setSoundOn(localStorage.getItem(SOUND_KEY) !== "off");
+    setSoundOn(isAlertSoundOn());
   }, []);
 
   function pushToast(t: Omit<Toast, "id">, withSound = true) {
@@ -73,18 +44,17 @@ export function NotificationCenter() {
     if (withSound) playAlertSound();
     setTimeout(() => {
       setToasts((prev) => prev.filter((x) => x.id !== id));
-    }, 6000);
+    }, 7000);
   }
 
   function browserNotify(title: string, body?: string, href?: string) {
     if (!browserOk || typeof window === "undefined" || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
-    if (document.hasFocus() && open) return;
     try {
       const n = new Notification(title, {
         body: body || "",
         tag: href || title,
-        silent: false,
+        silent: true, // el beep lo hace la app
       });
       n.onclick = () => {
         window.focus();
@@ -169,26 +139,33 @@ export function NotificationCenter() {
       if (Notification.permission === "granted") setBrowserOk(true);
     }
 
-    const softUnlock = () => {
-      try {
-        const Ctx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        const ctx = new Ctx();
-        void ctx.resume().then(() => ctx.close());
-      } catch {
-        // ignore
-      }
-    };
+    const softUnlock = () => unlockAlertAudio();
     window.addEventListener("pointerdown", softUnlock, { once: true });
 
+    const onAlert = (ev: Event) => {
+      const detail = (ev as CustomEvent<CrmAlertDetail>).detail;
+      if (!detail?.title) return;
+      pushToast(
+        {
+          title: detail.title,
+          body: detail.body,
+          href: detail.href,
+        },
+        false, // el sonido ya lo disparó emitCrmAlert
+      );
+      browserNotify(detail.title, detail.body, detail.href);
+      void load();
+    };
+    window.addEventListener("crm:alert", onAlert);
+
     load();
-    const a = setInterval(load, 5000);
-    const b = setInterval(watchInbox, 10000);
+    const a = setInterval(load, 4000);
+    const b = setInterval(watchInbox, 6000);
     return () => {
       clearInterval(a);
       clearInterval(b);
       window.removeEventListener("pointerdown", softUnlock);
+      window.removeEventListener("crm:alert", onAlert);
     };
   }, []);
 
@@ -201,7 +178,7 @@ export function NotificationCenter() {
   function toggleSound() {
     const next = !soundOn;
     setSoundOn(next);
-    localStorage.setItem(SOUND_KEY, next ? "on" : "off");
+    setAlertSoundOn(next);
     if (next) playAlertSound();
   }
 
