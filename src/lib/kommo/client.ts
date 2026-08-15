@@ -129,6 +129,23 @@ export const kommoApi = {
 
   getContact: (id: number) => kommoFetch<KommoContact>(`/contacts/${id}`),
 
+  updateContact: (payload: {
+    id: number;
+    name?: string;
+    first_name?: string;
+    last_name?: string;
+    responsible_user_id?: number;
+    custom_fields_values?: Array<{
+      field_code?: string;
+      field_id?: number;
+      values: Array<{ value: string; enum_code?: string }>;
+    }>;
+  }) =>
+    kommoFetch("/contacts", {
+      method: "PATCH",
+      body: JSON.stringify([payload]),
+    }),
+
   getCompanies: (onPage?: (items: KommoCompany[], page: number) => Promise<void> | void) =>
     fetchAllPages<KommoCompany>("/companies", "companies", 250, onPage),
 
