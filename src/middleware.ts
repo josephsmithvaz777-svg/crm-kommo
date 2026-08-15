@@ -17,6 +17,7 @@ const ADMIN_ONLY_PATHS = [
   "/api/sync",
   "/api/users",
   "/api/webhooks/register",
+  "/api/kommo/disconnect",
 ];
 
 function isPublic(pathname: string) {

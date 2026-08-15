@@ -152,13 +152,37 @@ export function SyncPanel() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {!status.connected && status.configured && (
+            {status.configured && (
               <a
                 href="/api/kommo/oauth/start"
                 className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
               >
-                Autorizar OAuth
+                {status.connected ? "Reautorizar OAuth" : "Autorizar OAuth"}
               </a>
+            )}
+            {status.connected && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  if (!confirm("¿Borrar tokens Kommo y volver a autorizar?")) return;
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    const res = await fetch("/api/kommo/disconnect", { method: "POST" });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || "No se pudo desconectar");
+                    await load();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Error");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-800 disabled:opacity-40"
+              >
+                Desconectar tokens
+              </button>
             )}
             <button
               type="button"
@@ -194,12 +218,11 @@ export function SyncPanel() {
           </div>
         </div>
 
-        {!status.connected && status.configured && (
+        {status.configured && (
           <div className="mt-5 border-t border-[var(--line)] pt-4">
             <p className="text-sm text-[var(--muted)]">
-              Alternativa (integración privada): en Kommo → tu integración → claves, copia el{" "}
-              <strong className="text-[var(--ink)]">código de autorización</strong> (válido 20 min) y
-              pégalo aquí.
+              Si el token está revocado: usa <strong className="text-[var(--ink)]">Reautorizar OAuth</strong>{" "}
+              o pega un código fresco de Kommo (válido 20 min).
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <input

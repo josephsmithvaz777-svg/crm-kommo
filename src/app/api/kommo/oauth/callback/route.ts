@@ -19,13 +19,13 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/configuracion?error=${encodeURIComponent(error)}`, req.url),
+      new URL(`/?error=${encodeURIComponent(error)}`, req.url),
     );
   }
 
   if (!code) {
     return NextResponse.redirect(
-      new URL("/configuracion?error=missing_code", req.url),
+      new URL("/?error=missing_code", req.url),
     );
   }
 
@@ -37,11 +37,11 @@ export async function GET(req: NextRequest) {
       where: { subdomain },
       data: { accountId: account.id },
     });
-    return NextResponse.redirect(new URL("/configuracion?connected=1", req.url));
+    return NextResponse.redirect(new URL("/?connected=1", req.url));
   } catch (err) {
     const message = err instanceof Error ? err.message : "oauth_failed";
     return NextResponse.redirect(
-      new URL(`/configuracion?error=${encodeURIComponent(message)}`, req.url),
+      new URL(`/?error=${encodeURIComponent(message)}`, req.url),
     );
   }
 }
