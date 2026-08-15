@@ -16,16 +16,17 @@ type UserRow = {
 function EyeIcon({ off }: { off?: boolean }) {
   if (off) {
     return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <path d="M3 3l18 18" />
-        <path d="M10.6 10.6a2 2 0 002.8 2.8" />
-        <path d="M9.9 5.1A10.6 10.6 0 0121 12c-.7 1.2-1.6 2.3-2.6 3.2M6.1 6.1C4.6 7.4 3.3 9.1 2.5 12c1.7 4.5 6 7.5 9.5 7.5 1.6 0 3.2-.4 4.6-1.2" />
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path strokeLinecap="round" d="M3 3l18 18" />
+        <path d="M10.58 10.58a2 2 0 002.83 2.83" />
+        <path d="M16.68 16.68A10.5 10.5 0 0112 19c-4.5 0-8.3-3-10-7 1.02-2.4 2.67-4.35 4.64-5.64" />
+        <path d="M9.88 5.09A10.5 10.5 0 0112 5c4.5 0 8.3 3 10 7-.73 1.72-1.81 3.23-3.13 4.45" />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M2.5 12C4.2 7.5 8.5 4.5 12 4.5S19.8 7.5 21.5 12C19.8 16.5 15.5 19.5 12 19.5S4.2 16.5 2.5 12z" />
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
   );
@@ -45,32 +46,24 @@ function PasswordField({
   className?: string;
 }) {
   const [visible, setVisible] = useState(false);
-  const [maskOk, setMaskOk] = useState(false);
-
-  useEffect(() => {
-    setMaskOk(typeof CSS !== "undefined" && CSS.supports("-webkit-text-security", "disc"));
-  }, []);
 
   return (
     <div className="flex items-center gap-1">
       <input
-        type={visible || maskOk ? "text" : "password"}
+        type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={className}
+        className={`${className || ""} ${visible ? "" : "password-masked"}`.trim()}
         placeholder={placeholder}
         minLength={required ? 6 : undefined}
         required={required}
         autoComplete="off"
-        data-lpignore="true"
-        data-1p-ignore="true"
         spellCheck={false}
-        style={!visible && maskOk ? { WebkitTextSecurity: "disc" } : undefined}
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        className="shrink-0 rounded border border-[var(--line)] p-1 text-[var(--muted)] hover:bg-[var(--sand)] hover:text-[var(--ink)]"
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--line)] text-[var(--ink)] hover:bg-[var(--sand)]"
         title={visible ? "Ocultar contraseña" : "Ver contraseña"}
         aria-label={visible ? "Ocultar contraseña" : "Ver contraseña"}
       >
@@ -191,8 +184,8 @@ export function TeamPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--muted)]">
-        Agrega asesores, mira o cambia su contraseña con Ver, o elimínalos. Las claves definidas
-        antes de esta función hay que volver a guardarlas para poder verlas.
+        Agrega asesores, mira o cambia su contraseña con el icono de ojo, o elimínalos. Las claves
+        definidas antes de esta función hay que volver a guardarlas para poder verlas.
       </p>
       {error && <p className="text-sm text-red-700">{error}</p>}
       <form
