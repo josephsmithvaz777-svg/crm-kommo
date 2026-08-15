@@ -76,3 +76,27 @@ export async function PATCH(req: NextRequest) {
   });
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const body = (await req.json().catch(() => ({}))) as { id?: string; all?: boolean };
+  const idFromQuery = req.nextUrl.searchParams.get("id");
+  const allFromQuery = req.nextUrl.searchParams.get("all") === "1";
+
+  if (body.all || allFromQuery) {
+    await prisma.notification.deleteMany({ where: { userId: session.id } });
+    return NextResponse.json({ ok: true });
+  }
+
+  const id = body.id || idFromQuery;
+  if (!id) {
+    return NextResponse.json({ error: "id requerido" }, { status: 400 });
+  }
+
+  await prisma.notification.deleteMany({
+    where: { id, userId: session.id },
+  });
+  return NextResponse.json({ ok: true });
+}

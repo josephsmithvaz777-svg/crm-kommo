@@ -207,6 +207,33 @@ export function NotificationCenter() {
     await load();
   }
 
+  async function deleteOne(
+    id: string,
+    e?: { stopPropagation: () => void; preventDefault: () => void },
+  ) {
+    e?.stopPropagation();
+    e?.preventDefault();
+    await fetch("/api/notifications", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    seenIds.current.delete(id);
+    await load();
+  }
+
+  async function clearAll() {
+    if (!confirm("¿Eliminar todas las notificaciones?")) return;
+    await fetch("/api/notifications", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ all: true }),
+    });
+    seenIds.current.clear();
+    bootstrapped.current = false;
+    await load();
+  }
+
   async function openItem(n: Notif) {
     await fetch("/api/notifications", {
       method: "PATCH",
@@ -224,19 +251,19 @@ export function NotificationCenter() {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="relative rounded-md px-3 py-1.5 text-[var(--muted)] transition hover:bg-[var(--sand)] hover:text-[var(--ink)]"
+          className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[var(--muted)] transition hover:bg-[var(--sand)] hover:text-[var(--ink)]"
           aria-label="Notificaciones"
         >
-          Alertas
+          <span>Alertas</span>
           {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 min-w-[1.1rem] rounded-full bg-red-600 px-1 text-center text-[10px] font-semibold text-white">
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">
               {unread > 9 ? "9+" : unread}
             </span>
           )}
         </button>
 
         {open && (
-          <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-lg">
+          <div className="absolute right-0 z-50 mt-2 w-[22rem] rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-lg">
             <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2">
               <p className="text-sm font-medium text-[var(--ink)]">Notificaciones</p>
               <div className="flex flex-wrap justify-end gap-2">
@@ -246,7 +273,7 @@ export function NotificationCenter() {
                   className={`text-[10px] underline ${soundOn ? "text-emerald-700" : "text-red-700"}`}
                   title={soundOn ? "Sonido activado" : "Sonido silenciado — haz clic para activar"}
                 >
-                  {soundOn ? "🔊 Sonido" : "🔇 Silenciado"}
+                  {soundOn ? "Sonido" : "Silenciado"}
                 </button>
                 {!browserOk && (
                   <button
@@ -264,35 +291,54 @@ export function NotificationCenter() {
                 >
                   Marcar leídas
                 </button>
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-[10px] text-red-700 underline"
+                >
+                  Limpiar todas
+                </button>
               </div>
             </div>
             {!soundOn && (
               <p className="border-b border-[var(--line)] bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-                El sonido está apagado. Pulsa <strong>Silenciado</strong> para activarlo y oír el beep.
+                El sonido está apagado. Pulsa <strong>Silenciado</strong> para activarlo.
               </p>
             )}
             <div className="max-h-80 overflow-y-auto">
               {items.map((n) => (
-                <button
+                <div
                   key={n.id}
-                  type="button"
-                  onClick={() => openItem(n)}
-                  className={`block w-full border-b border-[var(--line)]/60 px-3 py-2 text-left hover:bg-[var(--sand)]/50 ${
+                  className={`flex items-start gap-2 border-b border-[var(--line)]/60 px-3 py-2 hover:bg-[var(--sand)]/50 ${
                     n.readAt ? "opacity-60" : ""
                   }`}
                 >
-                  <p className="text-sm text-[var(--ink)]">{n.title}</p>
-                  {n.body && <p className="text-xs text-[var(--muted)]">{n.body}</p>}
-                  <p className="mt-0.5 text-[10px] text-[var(--muted)]">
-                    {new Date(n.createdAt).toLocaleString("es-PE", {
-                      timeZone: "America/Lima",
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => openItem(n)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p className="text-sm text-[var(--ink)]">{n.title}</p>
+                    {n.body && <p className="text-xs text-[var(--muted)]">{n.body}</p>}
+                    <p className="mt-0.5 text-[10px] text-[var(--muted)]">
+                      {new Date(n.createdAt).toLocaleString("es-PE", {
+                        timeZone: "America/Lima",
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => deleteOne(n.id, e)}
+                    className="shrink-0 rounded px-2 py-1 text-[10px] text-red-700 hover:bg-red-50"
+                    title="Eliminar notificación"
+                  >
+                    Eliminar
+                  </button>
+                </div>
               ))}
               {!items.length && (
                 <p className="px-3 py-8 text-center text-xs text-[var(--muted)]">
