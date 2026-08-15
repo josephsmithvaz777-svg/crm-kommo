@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Talk = {
   talk_id: number;
@@ -37,6 +37,13 @@ export function ChatWorkspace() {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [live, setLive] = useState(false);
+  const talkIdRef = useRef<number | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    talkIdRef.current = talkId;
+  }, [talkId]);
 
   async function loadInbox() {
     const res = await fetch("/api/chat");
@@ -50,11 +57,45 @@ export function ChatWorkspace() {
     setError(null);
   }
 
+  async function refreshMessages(silent = true) {
+    const id = talkIdRef.current;
+    if (!id) return;
+    const res = await fetch(`/api/chat?talkId=${id}`);
+    const data = await res.json();
+    if (!res.ok) {
+      if (!silent) {
+        setError(
+          data.error ||
+            "No se pudieron cargar mensajes (revisa permisos External chat history en Kommo)",
+        );
+      }
+      return;
+    }
+    setMessages(data.messages || []);
+    if (!silent) setError(null);
+    setLive(true);
+  }
+
   useEffect(() => {
     loadInbox();
-    const id = setInterval(loadInbox, 20000);
-    return () => clearInterval(id);
+    const inboxTimer = setInterval(loadInbox, 8000);
+    return () => clearInterval(inboxTimer);
   }, []);
+
+  // Mensajes en vivo desde Kommo (sin migración)
+  useEffect(() => {
+    if (!talkId) {
+      setLive(false);
+      return;
+    }
+    void refreshMessages(false);
+    const msgTimer = setInterval(() => void refreshMessages(true), 3000);
+    return () => clearInterval(msgTimer);
+  }, [talkId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -75,22 +116,13 @@ export function ChatWorkspace() {
     }
     setTalks(data.talks || []);
     if (data.talks?.[0]) {
-      void openTalk(data.talks[0].talk_id, leadId);
+      setTalkId(data.talks[0].talk_id);
     }
   }
 
   async function openTalk(id: number, leadId = selectedLeadId) {
     setTalkId(id);
     setSelectedLeadId(leadId);
-    const res = await fetch(`/api/chat?talkId=${id}`);
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "No se pudieron cargar mensajes (revisa permisos External chat history en Kommo)");
-      setMessages([]);
-      return;
-    }
-    setMessages(data.messages || []);
-    setError(null);
   }
 
   async function send() {
@@ -106,7 +138,7 @@ export function ChatWorkspace() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo enviar");
       setText("");
-      await openTalk(talkId);
+      await refreshMessages(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -119,7 +151,9 @@ export function ChatWorkspace() {
       <aside className="rounded-xl border border-[var(--line)] bg-[var(--panel)]">
         <div className="border-b border-[var(--line)] px-3 py-3">
           <h2 className="text-sm font-medium text-[var(--ink)]">Conversaciones</h2>
-          <p className="text-xs text-[var(--muted)]">Canales asignados vía Kommo</p>
+          <p className="text-xs text-[var(--muted)]">
+            En vivo desde Kommo · no hace falta migrar
+          </p>
         </div>
         <div className="max-h-[70vh] space-y-1 overflow-y-auto p-2">
           {inbox.map((item) => (
@@ -175,12 +209,19 @@ export function ChatWorkspace() {
 
       <section className="flex min-h-[70vh] flex-col rounded-xl border border-[var(--line)] bg-[var(--panel)]">
         <div className="border-b border-[var(--line)] px-4 py-3">
-          <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--ink)]">
-            {talkId ? `Chat #${talkId}` : "Mensajes"}
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--ink)]">
+              {talkId ? `Chat #${talkId}` : "Mensajes"}
+            </h2>
+            {talkId && live && (
+              <span className="text-[10px] uppercase tracking-wide text-emerald-700">
+                Actualizando cada 3s
+              </span>
+            )}
+          </div>
           <p className="text-xs text-[var(--muted)]">
-            WhatsApp / Instagram / Facebook según canales conectados en Kommo. Requiere scopes de
-            chat externo en la integración.
+            WhatsApp / Instagram / Facebook según canales en Kommo. La migración completa solo es
+            para la carga inicial de leads.
           </p>
         </div>
 
@@ -200,11 +241,14 @@ export function ChatWorkspace() {
                     {m.author?.name || (mine ? "Tú" : "Cliente")}
                     {m.origin ? ` · ${m.origin}` : ""}
                   </p>
-                  <p className="mt-0.5 whitespace-pre-wrap">{m.text || (m.attachment ? `[${m.attachment.type}]` : "")}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap">
+                    {m.text || (m.attachment ? `[${m.attachment.type}]` : "")}
+                  </p>
                 </div>
               </div>
             );
           })}
+          <div ref={bottomRef} />
           {!messages.length && (
             <p className="py-16 text-center text-sm text-[var(--muted)]">
               Selecciona una conversación para ver el historial.

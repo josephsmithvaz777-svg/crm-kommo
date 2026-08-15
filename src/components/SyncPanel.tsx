@@ -139,7 +139,7 @@ export function SyncPanel() {
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {status.connected
-                ? `Conectado a ${status.subdomain}.kommo.com`
+                ? `Conectado a ${status.subdomain}.kommo.com · Chat y leads nuevos llegan por webhooks/API (no migres cada vez)`
                 : status.configured
                   ? "Credenciales listas. Autoriza OAuth o pega el código."
                   : "Configura KOMMO_* en .env"}

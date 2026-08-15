@@ -23,11 +23,36 @@ function extractIds(section: unknown): number[] {
     .filter((id) => Number.isFinite(id) && id > 0);
 }
 
+/** IDs de lead asociados a talks/mensajes (WhatsApp, etc.) */
+function extractLeadIdsFromChatEvents(section: unknown): number[] {
+  const items = asArray<Record<string, unknown>>(section);
+  const ids: number[] = [];
+  for (const item of items) {
+    const nested = (item.element || item.entity || {}) as Record<string, unknown>;
+    const entityId = Number(
+      item.entity_id ?? item.element_id ?? nested.id ?? item.lead_id,
+    );
+    const entityType = String(
+      item.entity_type ?? item.element_type ?? nested.type ?? "lead",
+    ).toLowerCase();
+    const isLead =
+      !entityType ||
+      entityType === "lead" ||
+      entityType === "2" ||
+      entityType === "leads";
+    if (isLead && Number.isFinite(entityId) && entityId > 0) {
+      ids.push(entityId);
+    }
+  }
+  return [...new Set(ids)];
+}
+
 /**
  * Procesa webhooks de Kommo:
  * - lead add/update/status/delete/restore
  * - contact update
  * - task add/complete
+ * - talk/message → refresca el lead ligado (sin migración completa)
  */
 export async function processWebhookPayload(payload: WebhookPayload) {
   const event = await prisma.webhookEvent.create({
@@ -39,13 +64,14 @@ export async function processWebhookPayload(payload: WebhookPayload) {
   });
 
   try {
-    // Formato típico Kommo/amoCRM: { leads: { add: [...], update: [...], status: [...], delete: [...] } }
     const leads = (payload.leads || payload.lead) as Record<string, unknown> | undefined;
     const contacts = (payload.contacts || payload.contact) as Record<string, unknown> | undefined;
     const companies = (payload.companies || payload.company) as
       | Record<string, unknown>
       | undefined;
     const tasks = (payload.tasks || payload.task) as Record<string, unknown> | undefined;
+    const talks = (payload.talks || payload.talk) as Record<string, unknown> | undefined;
+    const messages = (payload.messages || payload.message) as Record<string, unknown> | undefined;
 
     if (leads) {
       for (const id of extractIds(leads.add)) {
@@ -57,6 +83,10 @@ export async function processWebhookPayload(payload: WebhookPayload) {
         await upsertLead(remote);
       }
       for (const id of extractIds(leads.status)) {
+        const remote = await kommoApi.getLead(id);
+        await upsertLead(remote);
+      }
+      for (const id of extractIds(leads.responsible)) {
         const remote = await kommoApi.getLead(id);
         await upsertLead(remote);
       }
@@ -93,6 +123,26 @@ export async function processWebhookPayload(payload: WebhookPayload) {
       }
     }
 
+    const chatLeadIds = new Set<number>();
+    if (talks) {
+      for (const action of Object.values(talks)) {
+        for (const id of extractLeadIdsFromChatEvents(action)) chatLeadIds.add(id);
+      }
+    }
+    if (messages) {
+      for (const action of Object.values(messages)) {
+        for (const id of extractLeadIdsFromChatEvents(action)) chatLeadIds.add(id);
+      }
+    }
+    for (const id of chatLeadIds) {
+      try {
+        const remote = await kommoApi.getLead(id);
+        await upsertLead(remote);
+      } catch {
+        // lead puede no existir aún; el poll de chat lo reintentará
+      }
+    }
+
     await prisma.webhookEvent.update({
       where: { id: event.id },
       data: { processed: true },
@@ -111,7 +161,20 @@ export async function processWebhookPayload(payload: WebhookPayload) {
 
 function detectEventName(payload: WebhookPayload): string {
   const keys = Object.keys(payload).filter((k) =>
-    ["leads", "lead", "contacts", "contact", "tasks", "task", "companies", "company"].includes(k),
+    [
+      "leads",
+      "lead",
+      "contacts",
+      "contact",
+      "tasks",
+      "task",
+      "companies",
+      "company",
+      "talks",
+      "talk",
+      "messages",
+      "message",
+    ].includes(k),
   );
   if (!keys.length) return "unknown";
   const root = keys[0];

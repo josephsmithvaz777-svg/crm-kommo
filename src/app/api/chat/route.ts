@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, leadScopeWhere } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { kommoApi, type KommoTalk } from "@/lib/kommo/client";
+import { upsertLead } from "@/lib/sync/migrate";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -32,6 +33,25 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Inbox: talks recientes de Kommo + asegurar leads locales (sin migración completa)
+    const recentTalks = await kommoApi.getTalks({ onlyInWork: true });
+    const talksList = recentTalks._embedded?.talks || [];
+
+    for (const talk of talksList.slice(0, 30)) {
+      if (!talk.entity_id) continue;
+      const type = String(talk.entity_type || "lead").toLowerCase();
+      if (type && type !== "lead" && type !== "2" && type !== "leads") continue;
+      const exists = await prisma.lead.findUnique({ where: { kommoId: talk.entity_id } });
+      if (!exists) {
+        try {
+          const remote = await kommoApi.getLead(talk.entity_id);
+          await upsertLead(remote);
+        } catch {
+          // ignore lead fetch errors
+        }
+      }
+    }
+
     const myLeads = await prisma.lead.findMany({
       where: { deletedAt: null, ...leadScopeWhere(session) },
       select: { id: true, name: true, kommoId: true },
@@ -39,13 +59,24 @@ export async function GET(req: NextRequest) {
       orderBy: { updatedAt: "desc" },
     });
 
+    const byKommoId = new Map(myLeads.map((l) => [l.kommoId, l]));
     const inbox: Array<{ talk: KommoTalk; lead: { id: string; name: string; kommoId: number } }> =
       [];
 
-    for (const lead of myLeads.slice(0, 25)) {
-      const res = await kommoApi.getTalks({ entityId: lead.kommoId, onlyInWork: true });
-      for (const talk of res._embedded?.talks || []) {
-        inbox.push({ talk, lead });
+    for (const talk of talksList) {
+      if (!talk.entity_id) continue;
+      const lead = byKommoId.get(talk.entity_id);
+      if (!lead) continue;
+      inbox.push({ talk, lead });
+    }
+
+    // Fallback: si Kommo no devolvió talks globales, consultar por lead
+    if (!inbox.length) {
+      for (const lead of myLeads.slice(0, 25)) {
+        const res = await kommoApi.getTalks({ entityId: lead.kommoId, onlyInWork: true });
+        for (const talk of res._embedded?.talks || []) {
+          inbox.push({ talk, lead });
+        }
       }
     }
 
