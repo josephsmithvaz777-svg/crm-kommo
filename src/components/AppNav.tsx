@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 type NavUser = { role: "admin" | "agent"; name: string } | null;
 
@@ -62,6 +63,7 @@ export function AppNav() {
               {user.name}
             </span>
           )}
+          {user && <NotificationCenter />}
           <button
             type="button"
             onClick={async () => {

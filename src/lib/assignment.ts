@@ -79,6 +79,13 @@ export async function assignLeadToUser(leadId: string, userId: string) {
     });
   }
 
+  try {
+    const { notifyLeadAssigned } = await import("@/lib/notifications");
+    await notifyLeadAssigned(leadId, userId);
+  } catch {
+    // no bloquear asignación por fallos de notificación
+  }
+
   return lead;
 }
 

@@ -60,6 +60,7 @@ model User {
   contacts     Contact[] @relation("ResponsibleContacts")
   companies    Company[] @relation("ResponsibleCompanies")
   tasks        Task[]   @relation("ResponsibleTasks")
+  notifications Notification[]
 }
 
 model Company {
@@ -227,4 +228,19 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String // message | lead_assigned
+  title     String
+  body      String?
+  href      String?
+  leadId    String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
 }

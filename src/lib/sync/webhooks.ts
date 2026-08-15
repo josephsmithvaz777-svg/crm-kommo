@@ -137,7 +137,9 @@ export async function processWebhookPayload(payload: WebhookPayload) {
     for (const id of chatLeadIds) {
       try {
         const remote = await kommoApi.getLead(id);
-        await upsertLead(remote);
+        const lead = await upsertLead(remote);
+        const { notifyLeadMessage } = await import("@/lib/notifications");
+        await notifyLeadMessage(lead.id, "Nuevo mensaje en WhatsApp / chat");
       } catch {
         // lead puede no existir aún; el poll de chat lo reintentará
       }
