@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
+  bumpUnread,
   isAlertSoundOn,
   playAlertSound,
   setAlertSoundOn,
@@ -35,6 +36,10 @@ export function NotificationCenter() {
   const bootstrapped = useRef(false);
 
   useEffect(() => {
+    // Forzar sonido ON si nunca se configuró (evita quedar en Mute sin querer)
+    if (localStorage.getItem("crm_alert_sound") == null) {
+      setAlertSoundOn(true);
+    }
     setSoundOn(isAlertSoundOn());
   }, []);
 
@@ -54,7 +59,7 @@ export function NotificationCenter() {
       const n = new Notification(title, {
         body: body || "",
         tag: href || title,
-        silent: true, // el beep lo hace la app
+        silent: true,
       });
       n.onclick = () => {
         window.focus();
@@ -117,6 +122,14 @@ export function NotificationCenter() {
         }
         if (updated > prev) {
           talkSeen.current[key] = updated;
+          bumpUnread(item.talk.talk_id, 1);
+          window.dispatchEvent(new Event("crm:unread"));
+          playAlertSound();
+          pushToast({
+            title: `Nuevo mensaje · ${item.lead.name}`,
+            body: "Nuevo mensaje en WhatsApp / chat",
+            href: `/chat?leadId=${item.lead.id}`,
+          }, false);
           await fetch("/api/notifications", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -151,7 +164,7 @@ export function NotificationCenter() {
           body: detail.body,
           href: detail.href,
         },
-        false, // el sonido ya lo disparó emitCrmAlert
+        false,
       );
       browserNotify(detail.title, detail.body, detail.href);
       void load();
@@ -160,7 +173,7 @@ export function NotificationCenter() {
 
     load();
     const a = setInterval(load, 4000);
-    const b = setInterval(watchInbox, 6000);
+    const b = setInterval(watchInbox, 5000);
     return () => {
       clearInterval(a);
       clearInterval(b);
@@ -179,7 +192,10 @@ export function NotificationCenter() {
     const next = !soundOn;
     setSoundOn(next);
     setAlertSoundOn(next);
-    if (next) playAlertSound();
+    if (next) {
+      unlockAlertAudio();
+      playAlertSound();
+    }
   }
 
   async function markAll() {
@@ -221,16 +237,16 @@ export function NotificationCenter() {
 
         {open && (
           <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-lg">
-            <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2">
               <p className="text-sm font-medium text-[var(--ink)]">Notificaciones</p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   onClick={toggleSound}
-                  className="text-[10px] text-[var(--muted)] underline"
-                  title={soundOn ? "Silenciar" : "Activar sonido"}
+                  className={`text-[10px] underline ${soundOn ? "text-emerald-700" : "text-red-700"}`}
+                  title={soundOn ? "Sonido activado" : "Sonido silenciado — haz clic para activar"}
                 >
-                  {soundOn ? "Sonido" : "Mute"}
+                  {soundOn ? "🔊 Sonido" : "🔇 Silenciado"}
                 </button>
                 {!browserOk && (
                   <button
@@ -250,6 +266,11 @@ export function NotificationCenter() {
                 </button>
               </div>
             </div>
+            {!soundOn && (
+              <p className="border-b border-[var(--line)] bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                El sonido está apagado. Pulsa <strong>Silenciado</strong> para activarlo y oír el beep.
+              </p>
+            )}
             <div className="max-h-80 overflow-y-auto">
               {items.map((n) => (
                 <button

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { emitCrmAlert, unlockAlertAudio } from "@/lib/alert-sound";
+import { emitCrmAlert, unlockAlertAudio, markTalkRead, getUnreadMap, syncUnreadFromTalk } from "@/lib/alert-sound";
 
 type Talk = {
   talk_id: number;
@@ -101,6 +101,7 @@ export function ChatWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState(false);
+  const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const talkIdRef = useRef<number | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const selectedLeadIdRef = useRef("");
@@ -133,8 +134,29 @@ export function ChatWorkspace() {
   useEffect(() => {
     const unlock = () => unlockAlertAudio();
     window.addEventListener("pointerdown", unlock, { once: true });
-    return () => window.removeEventListener("pointerdown", unlock);
+    setUnreadMap(getUnreadMap());
+    const onAlert = () => setUnreadMap(getUnreadMap());
+    window.addEventListener("crm:alert", onAlert);
+    window.addEventListener("crm:unread", onAlert);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("crm:alert", onAlert);
+      window.removeEventListener("crm:unread", onAlert);
+    };
   }, []);
+
+  function refreshUnreadBadges(items: InboxItem[]) {
+    const active = talkIdRef.current;
+    for (const item of items) {
+      const tid = item.talk.talk_id;
+      if (active === tid) {
+        markTalkRead(tid, item.talk.updated_at);
+        continue;
+      }
+      syncUnreadFromTalk(tid, item.talk.updated_at);
+    }
+    setUnreadMap(getUnreadMap());
+  }
 
   async function loadInbox() {
     const res = await fetch("/api/chat");
@@ -147,6 +169,7 @@ export function ChatWorkspace() {
     items.sort((a, b) => (b.talk.updated_at || 0) - (a.talk.updated_at || 0));
     setInbox(items);
     setLeads(data.leads || []);
+    refreshUnreadBadges(items);
     setError(null);
   }
 
@@ -178,11 +201,15 @@ export function ChatWorkspace() {
           inboxRef.current.find((i) => i.talk.talk_id === id)?.lead.name ||
           leadsRef.current.find((l) => l.id === leadId)?.name ||
           "Chat";
+        // Estás viendo este chat: suena y toast, sin sumar burbuja
         emitCrmAlert({
           title: `Nuevo mensaje · ${leadName}`,
           body: last.text || "Mensaje nuevo",
           href: leadId ? `/chat?leadId=${leadId}` : "/chat",
+          talkId: undefined,
         });
+        markTalkRead(id);
+        setUnreadMap(getUnreadMap());
         if (leadId) {
           void fetch("/api/notifications", {
             method: "POST",
@@ -199,6 +226,8 @@ export function ChatWorkspace() {
     setMessages(next);
     if (!silent) setError(null);
     setLive(true);
+    markTalkRead(id);
+    setUnreadMap(getUnreadMap());
   }
 
   useEffect(() => {
@@ -252,6 +281,9 @@ export function ChatWorkspace() {
   async function openTalk(id: number, leadId = selectedLeadId) {
     setTalkId(id);
     setSelectedLeadId(leadId);
+    const item = inboxRef.current.find((i) => i.talk.talk_id === id);
+    markTalkRead(id, item?.talk.updated_at);
+    setUnreadMap(getUnreadMap());
   }
 
   async function send() {
@@ -292,27 +324,40 @@ export function ChatWorkspace() {
           </p>
         </div>
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
-          {inbox.map((item) => (
+          {inbox.map((item) => {
+            const unread = unreadMap[String(item.talk.talk_id)] || 0;
+            const active = talkId === item.talk.talk_id;
+            return (
             <button
               key={`${item.talk.talk_id}-${item.lead.id}`}
               type="button"
               onClick={() => openTalk(item.talk.talk_id, item.lead.id)}
               className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
-                talkId === item.talk.talk_id ? "bg-[var(--sand)]" : "hover:bg-[var(--sand)]/60"
+                active ? "bg-[var(--sand)]" : "hover:bg-[var(--sand)]/60"
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="font-medium text-[var(--ink)]">{item.lead.name}</p>
-                <span className="shrink-0 text-[10px] text-[var(--muted)]">
-                  {formatInboxTime(item.talk.updated_at || item.talk.created_at)}
-                </span>
+                <p className={`min-w-0 flex-1 truncate font-medium ${unread && !active ? "text-[var(--ink)]" : "text-[var(--ink)]"}`}>
+                  {item.lead.name}
+                </p>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="text-[10px] text-[var(--muted)]">
+                    {formatInboxTime(item.talk.updated_at || item.talk.created_at)}
+                  </span>
+                  {unread > 0 && !active && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
+                </div>
               </div>
               <p className="text-xs text-[var(--muted)]">
                 {item.lead.phone || item.talk.origin || "canal"}
                 {` · #${item.lead.kommoId}`}
               </p>
             </button>
-          ))}
+            );
+          })}
           {!inbox.length && (
             <p className="px-2 py-6 text-center text-xs text-[var(--muted)]">
               Sin chats abiertos. Elige un lead abajo.
