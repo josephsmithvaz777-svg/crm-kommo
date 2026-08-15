@@ -48,7 +48,7 @@ export function AppNav() {
         >
           Conexión<span className="text-[var(--accent)]">CRM</span>
         </Link>
-        <nav className="flex flex-wrap items-center gap-1 text-sm">
+        <nav className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
           {(user?.role === "agent" ? agentLinks : visibleLinks).map((link) => (
             <Link
               key={link.href}
@@ -63,7 +63,11 @@ export function AppNav() {
               {user.name}
             </span>
           )}
-          {user && <NotificationCenter />}
+          {user && (
+            <div className="flex shrink-0 items-center">
+              <NotificationCenter />
+            </div>
+          )}
           <button
             type="button"
             onClick={async () => {

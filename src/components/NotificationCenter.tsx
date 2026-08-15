@@ -247,19 +247,22 @@ export function NotificationCenter() {
 
   return (
     <>
-      <div className="relative">
+      <div className="relative shrink-0">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[var(--muted)] transition hover:bg-[var(--sand)] hover:text-[var(--ink)]"
+          className="inline-flex items-center rounded-md px-3 py-1.5 text-[var(--muted)] transition hover:bg-[var(--sand)] hover:text-[var(--ink)]"
           aria-label="Notificaciones"
         >
-          <span>Alertas</span>
-          {unread > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">
+          <span className="leading-none">Alertas</span>
+          {unread > 0 ? (
+            <span
+              className="ml-2 inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold leading-none text-white"
+              aria-hidden
+            >
               {unread > 9 ? "9+" : unread}
             </span>
-          )}
+          ) : null}
         </button>
 
         {open && (
