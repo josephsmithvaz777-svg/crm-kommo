@@ -101,7 +101,7 @@ export async function loginWithEmailPassword(email: string, password: string) {
     name: user.name,
     email: user.email,
     role: user.role === "admin" ? "admin" : "agent",
-    kommoId: user.kommoId,
+    kommoId: user.kommoId ?? 0,
   };
   await createSession(session);
   return session;

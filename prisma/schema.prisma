@@ -47,7 +47,7 @@ model Stage {
 
 model User {
   id           String   @id @default(cuid())
-  kommoId      Int      @unique
+  kommoId      Int?     @unique
   name         String
   email        String?
   passwordHash String?

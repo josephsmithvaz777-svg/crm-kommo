@@ -8,7 +8,7 @@ type UserRow = {
   email: string | null;
   role: string;
   hasPassword: boolean;
-  kommoId: number;
+  kommoId: number | null;
   _count: { leads: number };
 };
 
@@ -17,6 +17,11 @@ export function TeamPanel() {
   const [error, setError] = useState<string | null>(null);
   const [passwords, setPasswords] = useState<Record<string, string>>({});
   const [emails, setEmails] = useState<Record<string, string>>({});
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"agent" | "admin">("agent");
+  const [creating, setCreating] = useState(false);
 
   async function load() {
     const res = await fetch("/api/users");
@@ -56,13 +61,100 @@ export function TeamPanel() {
     await load();
   }
 
+  async function createUser() {
+    setError(null);
+    setCreating(true);
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newName,
+          email: newEmail,
+          password: newPassword,
+          role: newRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "No se pudo crear");
+        return;
+      }
+      setNewName("");
+      setNewEmail("");
+      setNewPassword("");
+      setNewRole("agent");
+      await load();
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--muted)]">
-        Tras la migración, los asesores de Kommo aparecen aquí. Asigna email + contraseña (máx. ~10
-        usuarios activos).
+        Agrega asesores locales o asigna email + contraseña a los que vinieron de Kommo.
       </p>
       {error && <p className="text-sm text-red-700">{error}</p>}
+      <form
+        className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:grid-cols-[1fr_1fr_1fr_auto_auto] sm:items-end"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void createUser();
+        }}
+      >
+        <label className="block text-xs text-[var(--muted)]">
+          Nombre
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            className="mt-1 w-full rounded border border-[var(--line)] px-2 py-1.5 text-sm text-[var(--ink)]"
+            placeholder="Nombre del asesor"
+            required
+          />
+        </label>
+        <label className="block text-xs text-[var(--muted)]">
+          Email login
+          <input
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            className="mt-1 w-full rounded border border-[var(--line)] px-2 py-1.5 text-sm text-[var(--ink)]"
+            placeholder="asesor@empresa.com"
+            required
+          />
+        </label>
+        <label className="block text-xs text-[var(--muted)]">
+          Contraseña
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="mt-1 w-full rounded border border-[var(--line)] px-2 py-1.5 text-sm text-[var(--ink)]"
+            placeholder="mín. 6 caracteres"
+            minLength={6}
+            required
+          />
+        </label>
+        <label className="block text-xs text-[var(--muted)]">
+          Rol
+          <select
+            value={newRole}
+            onChange={(e) => setNewRole(e.target.value as "agent" | "admin")}
+            className="mt-1 w-full rounded border border-[var(--line)] px-2 py-1.5 text-sm"
+          >
+            <option value="agent">agent</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
+        <button
+          type="submit"
+          disabled={creating}
+          className="rounded bg-[var(--accent)] px-4 py-2 text-sm text-white disabled:opacity-60"
+        >
+          {creating ? "Creando…" : "Agregar usuario"}
+        </button>
+      </form>
       <div className="overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--panel)]">
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-[var(--line)] text-xs uppercase text-[var(--muted)]">

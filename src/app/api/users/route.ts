@@ -82,3 +82,61 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
+
+/** Admin (o modo instalación): crea un asesor local, sin usuario de Kommo */
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getSession();
+    const open = setupOpen();
+
+    if (!open && (!session || session.role !== "admin")) {
+      return NextResponse.json({ error: "Solo admin" }, { status: 403 });
+    }
+
+    const body = (await req.json()) as {
+      name?: string;
+      email?: string;
+      password?: string;
+      role?: "admin" | "agent";
+    };
+
+    const name = body.name?.trim() ?? "";
+    const email = body.email?.trim() ?? "";
+    const password = body.password ?? "";
+    const role = body.role === "admin" ? "admin" : "agent";
+
+    if (!name) {
+      return NextResponse.json({ error: "Nombre requerido" }, { status: 400 });
+    }
+    if (!email) {
+      return NextResponse.json({ error: "Email requerido" }, { status: 400 });
+    }
+    if (password.length < 6) {
+      return NextResponse.json({ error: "Contraseña de al menos 6 caracteres" }, { status: 400 });
+    }
+
+    const existing = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
+    if (existing) {
+      return NextResponse.json({ error: "Ya existe un usuario con ese email" }, { status: 409 });
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        passwordHash: await hashPassword(password),
+        role,
+        isActive: true,
+        inAssignPool: true,
+      },
+      select: { id: true, name: true, email: true, role: true },
+    });
+
+    return NextResponse.json({ user }, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
