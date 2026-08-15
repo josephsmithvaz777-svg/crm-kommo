@@ -89,7 +89,7 @@ export async function notifyLeadAssigned(leadId: string, userId: string) {
     type: "lead_assigned",
     title: `Lead asignado · ${lead.name}`,
     body: "Se te asignó un nuevo lead. Ábrelo para atenderlo.",
-    href: `/leads`,
+    href: `/chat?leadId=${lead.id}`,
     leadId: lead.id,
   });
 }

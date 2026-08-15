@@ -56,22 +56,29 @@ function formatInboxTime(ts?: number | null) {
   const sameDay =
     d.toLocaleDateString("es-PE", { timeZone: "America/Lima" }) ===
     now.toLocaleDateString("es-PE", { timeZone: "America/Lima" });
+
+  // Formato corto 24h para que no se parta "a. m."
   if (sameDay) {
     return new Intl.DateTimeFormat("es-PE", {
       timeZone: "America/Lima",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: true,
+      hour12: false,
     }).format(d);
   }
-  return new Intl.DateTimeFormat("es-PE", {
+
+  const day = new Intl.DateTimeFormat("es-PE", {
     timeZone: "America/Lima",
     day: "2-digit",
     month: "short",
+  }).format(d);
+  const time = new Intl.DateTimeFormat("es-PE", {
+    timeZone: "America/Lima",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hour12: false,
   }).format(d);
+  return `${day} ${time}`;
 }
 
 function sortMessagesAsc(list: Message[]) {
@@ -355,7 +362,7 @@ export function ChatWorkspace() {
     null;
 
   return (
-    <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[280px_1fr]">
+    <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[minmax(300px,340px)_1fr]">
       <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
         <div className="shrink-0 border-b border-[var(--line)] px-3 py-2.5">
           <h2 className="text-sm font-medium text-[var(--ink)]">Conversaciones</h2>
@@ -379,7 +386,7 @@ export function ChatWorkspace() {
                 active ? "bg-[var(--sand)]" : "hover:bg-[var(--sand)]/60"
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-[var(--ink)]">{item.lead.name}</p>
                   <p className="truncate text-xs text-[var(--muted)]">
@@ -387,8 +394,8 @@ export function ChatWorkspace() {
                     {` · #${item.lead.kommoId}`}
                   </p>
                 </div>
-                <div className="flex w-10 shrink-0 flex-col items-end justify-center gap-0.5">
-                  <span className="text-[10px] leading-none text-[var(--muted)]">
+                <div className="flex w-[72px] shrink-0 flex-col items-end justify-center gap-1">
+                  <span className="whitespace-nowrap text-[10px] leading-none text-[var(--muted)]">
                     {formatInboxTime(item.talk.updated_at || item.talk.created_at)}
                   </span>
                   <span

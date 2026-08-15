@@ -93,12 +93,16 @@ export function NotificationCenter() {
         {
           title: n.title,
           body: n.body || undefined,
-          href: n.href || undefined,
+          href: n.leadId ? `/chat?leadId=${n.leadId}` : n.href || undefined,
         },
         !played,
       );
       played = true;
-      browserNotify(n.title, n.body || undefined, n.href || undefined);
+      browserNotify(
+        n.title,
+        n.body || undefined,
+        n.leadId ? `/chat?leadId=${n.leadId}` : n.href || undefined,
+      );
     }
   }
 
@@ -241,8 +245,13 @@ export function NotificationCenter() {
       body: JSON.stringify({ id: n.id }),
     });
     setOpen(false);
-    if (n.href) window.location.href = n.href;
-    else await load();
+    // Siempre ir al chat del lead si hay leadId (aunque href viejo diga /leads)
+    const href = n.leadId ? `/chat?leadId=${n.leadId}` : n.href;
+    if (href) {
+      window.location.assign(href);
+      return;
+    }
+    await load();
   }
 
   return (
@@ -362,9 +371,14 @@ export function NotificationCenter() {
             <p className="text-sm font-medium text-[var(--ink)]">{t.title}</p>
             {t.body && <p className="mt-0.5 text-xs text-[var(--muted)]">{t.body}</p>}
             {t.href && (
-              <Link href={t.href} className="mt-2 inline-block text-xs text-[var(--accent)] underline">
-                Abrir
-              </Link>
+              <a
+                href={t.href.includes("leadId=") || t.href.startsWith("/chat")
+                  ? t.href
+                  : t.href}
+                className="mt-2 inline-block text-xs text-[var(--accent)] underline"
+              >
+                Abrir chat
+              </a>
             )}
           </div>
         ))}
