@@ -8,12 +8,52 @@ type UserRow = {
   email: string | null;
   role: string;
   hasPassword: boolean;
+  passwordReveal: string | null;
   kommoId: number | null;
   _count: { leads: number };
 };
 
+function PasswordField({
+  value,
+  onChange,
+  placeholder,
+  required,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  className?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={className}
+        placeholder={placeholder}
+        minLength={required ? 6 : undefined}
+        required={required}
+        autoComplete="new-password"
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        className="shrink-0 rounded border border-[var(--line)] px-2 py-1 text-[10px] uppercase text-[var(--muted)]"
+        title={visible ? "Ocultar contraseña" : "Ver contraseña"}
+      >
+        {visible ? "Ocultar" : "Ver"}
+      </button>
+    </div>
+  );
+}
+
 export function TeamPanel() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [passwords, setPasswords] = useState<Record<string, string>>({});
   const [emails, setEmails] = useState<Record<string, string>>({});
@@ -22,6 +62,7 @@ export function TeamPanel() {
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<"agent" | "admin">("agent");
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function load() {
     const res = await fetch("/api/users");
@@ -30,10 +71,11 @@ export function TeamPanel() {
       setError(data.error || "Sin acceso");
       return;
     }
-    setUsers(data.users || []);
-    setEmails(
-      Object.fromEntries((data.users || []).map((u: UserRow) => [u.id, u.email || ""])),
-    );
+    const rows: UserRow[] = data.users || [];
+    setUsers(rows);
+    setCurrentUserId(data.currentUserId || null);
+    setEmails(Object.fromEntries(rows.map((u) => [u.id, u.email || ""])));
+    setPasswords(Object.fromEntries(rows.map((u) => [u.id, u.passwordReveal || ""])));
   }
 
   useEffect(() => {
@@ -57,7 +99,6 @@ export function TeamPanel() {
       setError(data.error || "No se pudo guardar");
       return;
     }
-    setPasswords((p) => ({ ...p, [userId]: "" }));
     await load();
   }
 
@@ -90,14 +131,43 @@ export function TeamPanel() {
     }
   }
 
+  async function removeUser(user: UserRow) {
+    if (user.id === currentUserId) {
+      setError("No puedes eliminarte a ti mismo");
+      return;
+    }
+    const ok = window.confirm(
+      `¿Eliminar a ${user.name}? Sus leads quedarán sin asignar. Si existe en Kommo, una sincronización puede volver a crearlo.`,
+    );
+    if (!ok) return;
+    setError(null);
+    setDeletingId(user.id);
+    try {
+      const res = await fetch("/api/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "No se pudo eliminar");
+        return;
+      }
+      await load();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--muted)]">
-        Agrega asesores locales o asigna email + contraseña a los que vinieron de Kommo.
+        Agrega asesores, mira o cambia su contraseña con Ver, o elimínalos. Las claves definidas
+        antes de esta función hay que volver a guardarlas para poder verlas.
       </p>
       {error && <p className="text-sm text-red-700">{error}</p>}
       <form
-        className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:grid-cols-[1fr_1fr_1fr_auto_auto] sm:items-end"
+        className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:grid-cols-[1fr_1fr_1.2fr_auto_auto] sm:items-end"
         onSubmit={(e) => {
           e.preventDefault();
           void createUser();
@@ -126,15 +196,15 @@ export function TeamPanel() {
         </label>
         <label className="block text-xs text-[var(--muted)]">
           Contraseña
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            className="mt-1 w-full rounded border border-[var(--line)] px-2 py-1.5 text-sm text-[var(--ink)]"
-            placeholder="mín. 6 caracteres"
-            minLength={6}
-            required
-          />
+          <div className="mt-1">
+            <PasswordField
+              value={newPassword}
+              onChange={setNewPassword}
+              placeholder="mín. 6 caracteres"
+              required
+              className="w-full rounded border border-[var(--line)] px-2 py-1.5 text-sm text-[var(--ink)]"
+            />
+          </div>
         </label>
         <label className="block text-xs text-[var(--muted)]">
           Rol
@@ -180,12 +250,17 @@ export function TeamPanel() {
                   />
                 </td>
                 <td className="px-3 py-2">
-                  <input
-                    type="password"
+                  <PasswordField
                     value={passwords[u.id] || ""}
-                    onChange={(e) => setPasswords((x) => ({ ...x, [u.id]: e.target.value }))}
+                    onChange={(value) => setPasswords((x) => ({ ...x, [u.id]: value }))}
+                    placeholder={
+                      u.hasPassword && !u.passwordReveal
+                        ? "•••••• (guardar de nuevo para verla)"
+                        : u.hasPassword
+                          ? "contraseña actual"
+                          : "definir"
+                    }
                     className="w-36 rounded border border-[var(--line)] px-2 py-1 text-xs"
-                    placeholder={u.hasPassword ? "•••••• (cambiar)" : "definir"}
                   />
                 </td>
                 <td className="px-3 py-2">
@@ -200,13 +275,23 @@ export function TeamPanel() {
                 </td>
                 <td className="px-3 py-2 text-[var(--muted)]">{u._count.leads}</td>
                 <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => save(u.id)}
-                    className="rounded bg-[var(--accent)] px-3 py-1 text-xs text-white"
-                  >
-                    Guardar
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => save(u.id)}
+                      className="rounded bg-[var(--accent)] px-3 py-1 text-xs text-white"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deletingId === u.id || u.id === currentUserId}
+                      onClick={() => void removeUser(u)}
+                      className="rounded border border-red-300 px-3 py-1 text-xs text-red-700 disabled:opacity-40"
+                    >
+                      {deletingId === u.id ? "Eliminando…" : "Eliminar"}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

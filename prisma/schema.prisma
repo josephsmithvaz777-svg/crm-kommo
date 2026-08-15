@@ -51,6 +51,7 @@ model User {
   name         String
   email        String?
   passwordHash String?
+  passwordEncrypted String?
   role         String   @default("agent") // admin | agent
   isActive     Boolean  @default(true)
   inAssignPool Boolean  @default(true)
