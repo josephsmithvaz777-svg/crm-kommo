@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   bumpUnread,
@@ -372,9 +371,7 @@ export function NotificationCenter() {
             {t.body && <p className="mt-0.5 text-xs text-[var(--muted)]">{t.body}</p>}
             {t.href && (
               <a
-                href={t.href.includes("leadId=") || t.href.startsWith("/chat")
-                  ? t.href
-                  : t.href}
+                href={t.href}
                 className="mt-2 inline-block text-xs text-[var(--accent)] underline"
               >
                 Abrir chat

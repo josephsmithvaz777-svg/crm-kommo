@@ -57,28 +57,22 @@ function formatInboxTime(ts?: number | null) {
     d.toLocaleDateString("es-PE", { timeZone: "America/Lima" }) ===
     now.toLocaleDateString("es-PE", { timeZone: "America/Lima" });
 
-  // Formato corto 24h para que no se parta "a. m."
-  if (sameDay) {
-    return new Intl.DateTimeFormat("es-PE", {
-      timeZone: "America/Lima",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(d);
-  }
-
-  const day = new Intl.DateTimeFormat("es-PE", {
-    timeZone: "America/Lima",
-    day: "2-digit",
-    month: "short",
-  }).format(d);
   const time = new Intl.DateTimeFormat("es-PE", {
     timeZone: "America/Lima",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   }).format(d);
-  return `${day} ${time}`;
+
+  // Hoy: solo hora. Otros días: fecha + hora en dos líneas (evita partir "a. m.")
+  if (sameDay) return time;
+
+  const day = new Intl.DateTimeFormat("es-PE", {
+    timeZone: "America/Lima",
+    day: "2-digit",
+    month: "short",
+  }).format(d);
+  return `${day}\n${time}`;
 }
 
 function sortMessagesAsc(list: Message[]) {
@@ -394,8 +388,8 @@ export function ChatWorkspace() {
                     {` · #${item.lead.kommoId}`}
                   </p>
                 </div>
-                <div className="flex w-[72px] shrink-0 flex-col items-end justify-center gap-1">
-                  <span className="whitespace-nowrap text-[10px] leading-none text-[var(--muted)]">
+                <div className="flex w-[4.5rem] shrink-0 flex-col items-end justify-center gap-1">
+                  <span className="whitespace-pre-line text-right text-[10px] leading-tight text-[var(--muted)]">
                     {formatInboxTime(item.talk.updated_at || item.talk.created_at)}
                   </span>
                   <span
