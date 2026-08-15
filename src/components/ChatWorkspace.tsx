@@ -107,9 +107,11 @@ export function ChatWorkspace() {
   const selectedLeadIdRef = useRef("");
   const inboxRef = useRef<InboxItem[]>([]);
   const leadsRef = useRef<LeadOption[]>([]);
+  const inboxListRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickToBottom = useRef(true);
+  const lastMsgCountRef = useRef(0);
 
   useEffect(() => {
     talkIdRef.current = talkId;
@@ -132,6 +134,15 @@ export function ChatWorkspace() {
   }, [leads]);
 
   useEffect(() => {
+    // Evitar que el <main> se mueva solo en la página de Chat
+    const main = document.querySelector("main");
+    const prevOverflow = main?.style.overflowY;
+    if (main) {
+      main.style.overflowY = "hidden";
+      main.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+
     const unlock = () => unlockAlertAudio();
     window.addEventListener("pointerdown", unlock, { once: true });
     setUnreadMap(getUnreadMap());
@@ -139,6 +150,7 @@ export function ChatWorkspace() {
     window.addEventListener("crm:alert", onAlert);
     window.addEventListener("crm:unread", onAlert);
     return () => {
+      if (main) main.style.overflowY = prevOverflow || "";
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("crm:alert", onAlert);
       window.removeEventListener("crm:unread", onAlert);
@@ -155,10 +167,23 @@ export function ChatWorkspace() {
       }
       syncUnreadFromTalk(tid, item.talk.updated_at);
     }
-    setUnreadMap(getUnreadMap());
+    const next = getUnreadMap();
+    setUnreadMap((prev) => {
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (
+        prevKeys.length === nextKeys.length &&
+        prevKeys.every((k) => prev[k] === next[k])
+      ) {
+        return prev;
+      }
+      return next;
+    });
   }
 
   async function loadInbox() {
+    const el = inboxListRef.current;
+    const savedScroll = el?.scrollTop ?? 0;
     const res = await fetch("/api/chat");
     const data = await res.json();
     if (!res.ok) {
@@ -171,6 +196,10 @@ export function ChatWorkspace() {
     setLeads(data.leads || []);
     refreshUnreadBadges(items);
     setError(null);
+    // Restaurar scroll de la lista (el refresh no debe bajarla solo)
+    requestAnimationFrame(() => {
+      if (inboxListRef.current) inboxListRef.current.scrollTop = savedScroll;
+    });
   }
 
   async function refreshMessages(silent = true) {
@@ -250,9 +279,19 @@ export function ChatWorkspace() {
 
   useEffect(() => {
     if (!stickToBottom.current || !listRef.current) return;
-    // Solo scroll del panel de mensajes (no de toda la página)
+    // Solo cuando hay mensajes nuevos (no en cada poll idéntico)
+    if (messages.length <= lastMsgCountRef.current) {
+      lastMsgCountRef.current = messages.length;
+      return;
+    }
+    lastMsgCountRef.current = messages.length;
     listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages.length]);
+
+  useEffect(() => {
+    // Al cambiar de conversación, resetear contador y bajar al final una vez
+    lastMsgCountRef.current = 0;
+  }, [talkId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -324,7 +363,10 @@ export function ChatWorkspace() {
             En vivo desde Kommo · no hace falta migrar
           </p>
         </div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-2">
+        <div
+          ref={inboxListRef}
+          className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-2"
+        >
           {inbox.map((item) => {
             const unread = unreadMap[String(item.talk.talk_id)] || 0;
             const active = talkId === item.talk.talk_id;
@@ -345,15 +387,17 @@ export function ChatWorkspace() {
                     {` · #${item.lead.kommoId}`}
                   </p>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <span className="text-[10px] text-[var(--muted)]">
+                <div className="flex w-10 shrink-0 flex-col items-end justify-center gap-0.5">
+                  <span className="text-[10px] leading-none text-[var(--muted)]">
                     {formatInboxTime(item.talk.updated_at || item.talk.created_at)}
                   </span>
-                  {unread > 0 && !active && (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold leading-none text-white">
-                      {unread > 99 ? "99+" : unread}
-                    </span>
-                  )}
+                  <span
+                    className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none text-white ${
+                      unread > 0 && !active ? "bg-emerald-600" : "invisible bg-emerald-600"
+                    }`}
+                  >
+                    {unread > 99 ? "99+" : unread || "0"}
+                  </span>
                 </div>
               </div>
             </button>
