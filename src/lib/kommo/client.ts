@@ -124,6 +124,35 @@ export const kommoApi = {
       body: JSON.stringify([payload]),
     }),
 
+  createContact: (payload: {
+    name: string;
+    first_name?: string;
+    last_name?: string;
+    custom_fields_values?: Array<{
+      field_code?: string;
+      field_id?: number;
+      values: Array<{ value: string; enum_code?: string }>;
+    }>;
+  }) =>
+    kommoFetch<{ _embedded?: { contacts: Array<{ id: number }> } }>("/contacts", {
+      method: "POST",
+      body: JSON.stringify([payload]),
+    }),
+
+  createLead: (payload: {
+    name: string;
+    price?: number;
+    pipeline_id?: number;
+    status_id?: number;
+    _embedded?: {
+      contacts?: Array<{ id: number; is_main?: boolean }>;
+    };
+  }) =>
+    kommoFetch<{ _embedded?: { leads: Array<{ id: number }> } }>("/leads", {
+      method: "POST",
+      body: JSON.stringify([payload]),
+    }),
+
   getContacts: (onPage?: (items: KommoContact[], page: number) => Promise<void> | void) =>
     fetchAllPages<KommoContact>("/contacts?with=leads", "contacts", 250, onPage),
 

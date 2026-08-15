@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CreateLeadButton } from "@/components/CreateLeadButton";
 
 export type ContactRow = {
   id: string;
@@ -92,6 +93,25 @@ export function ContactsTable({ contacts: initial }: { contacts: ContactRow[] })
           className="min-w-[220px] flex-1 rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-sm"
         />
         <p className="text-xs text-[var(--muted)]">{filtered.length} contactos</p>
+        <CreateLeadButton
+          onCreated={(data) => {
+            setRows((prev) => [
+              {
+                id: data.contactId,
+                name: data.name,
+                phone: data.phone,
+                email: data.email,
+                firstName: null,
+                lastName: null,
+                kommoId: data.kommoId,
+                companyName: null,
+                responsibleName: null,
+              },
+              ...prev,
+            ]);
+            setNotice("Lead creado en Kommo y ConexiónCRM");
+          }}
+        />
       </div>
 
       {notice && <p className="text-sm text-amber-800">{notice}</p>}

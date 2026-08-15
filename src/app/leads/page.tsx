@@ -3,6 +3,7 @@ import { getSession, leadScopeWhere } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LeadAssignSelect } from "@/components/LeadAssignSelect";
+import { CreateLeadButton } from "@/components/CreateLeadButton";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,7 @@ export default async function LeadsPage() {
               : `${leads.length} registros · reparto en /reparto`}
           </p>
         </div>
+        <CreateLeadButton />
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--panel)]">
@@ -109,7 +111,7 @@ export default async function LeadsPage() {
                       {phone ? ` · ${phone}` : ""}
                     </p>
                   </td>
-                  <td className="px-4 py-3 text-[var(--muted)] whitespace-nowrap">
+                  <td className="whitespace-nowrap px-4 py-3 text-[var(--muted)]">
                     {formatEntryTime(entryAt)}
                   </td>
                   <td className="px-4 py-3 text-[var(--muted)]">{lead.stage?.name || "—"}</td>
