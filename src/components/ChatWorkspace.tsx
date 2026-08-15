@@ -13,7 +13,7 @@ type Talk = {
 
 type InboxItem = {
   talk: Talk;
-  lead: { id: string; name: string; kommoId: number };
+  lead: { id: string; name: string; phone?: string | null; kommoId: number };
 };
 
 type Message = {
@@ -26,7 +26,7 @@ type Message = {
   attachment?: { type?: string; link?: string; file_name?: string } | null;
 };
 
-type LeadOption = { id: string; name: string; kommoId: number };
+type LeadOption = { id: string; name: string; phone?: string | null; kommoId: number };
 
 /** Kommo usa unix seconds */
 function fromUnix(ts?: number | null) {
@@ -217,6 +217,10 @@ export function ChatWorkspace() {
   }
 
   let lastDay = "";
+  const selectedLead =
+    inbox.find((i) => i.talk.talk_id === talkId)?.lead ||
+    leads.find((l) => l.id === selectedLeadId) ||
+    null;
 
   return (
     <div className="grid h-[calc(100dvh-7.5rem)] gap-4 lg:grid-cols-[280px_1fr]">
@@ -244,7 +248,8 @@ export function ChatWorkspace() {
                 </span>
               </div>
               <p className="text-xs text-[var(--muted)]">
-                {item.talk.origin || "canal"} · #{item.talk.talk_id}
+                {item.lead.phone || item.talk.origin || "canal"}
+                {` · #${item.lead.kommoId}`}
               </p>
             </button>
           ))}
@@ -265,6 +270,7 @@ export function ChatWorkspace() {
             {leads.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
+                {l.phone ? ` · ${l.phone}` : ""}
               </option>
             ))}
           </select>
@@ -288,18 +294,29 @@ export function ChatWorkspace() {
       <section className="flex min-h-0 flex-col rounded-xl border border-[var(--line)] bg-[var(--panel)]">
         <div className="shrink-0 border-b border-[var(--line)] px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--ink)]">
-              {talkId ? `Chat #${talkId}` : "Mensajes"}
-            </h2>
+            <div>
+              <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--ink)]">
+                {selectedLead?.name || (talkId ? `Chat #${talkId}` : "Mensajes")}
+              </h2>
+              {selectedLead && (
+                <p className="text-xs text-[var(--muted)]">
+                  {selectedLead.phone ? `${selectedLead.phone} · ` : ""}
+                  Lead #{selectedLead.kommoId}
+                  {talkId ? ` · chat #${talkId}` : ""}
+                </p>
+              )}
+            </div>
             {talkId && live && (
               <span className="text-[10px] uppercase tracking-wide text-emerald-700">
                 Actualizando cada 3s
               </span>
             )}
           </div>
-          <p className="text-xs text-[var(--muted)]">
-            Orden cronológico · hora Perú (America/Lima)
-          </p>
+          {!selectedLead && (
+            <p className="text-xs text-[var(--muted)]">
+              Orden cronológico · hora Perú (America/Lima)
+            </p>
+          )}
         </div>
 
         <div

@@ -4,6 +4,19 @@ import { prisma } from "@/lib/db";
 import { kommoApi, type KommoTalk } from "@/lib/kommo/client";
 import { upsertLead } from "@/lib/sync/migrate";
 
+function resolveDisplayName(
+  leadName: string,
+  contacts: Array<{ isPrimary: boolean; contact: { name: string; phone: string | null } }>,
+) {
+  const primary =
+    contacts.find((c) => c.isPrimary)?.contact || contacts[0]?.contact || null;
+  const generic = /^lead\s*#?\s*\d+$/i.test(leadName.trim());
+  if (primary?.name && (generic || !leadName.trim())) {
+    return { name: primary.name, phone: primary.phone };
+  }
+  return { name: leadName, phone: primary?.phone || null };
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -23,20 +36,31 @@ export async function GET(req: NextRequest) {
     if (leadId) {
       const lead = await prisma.lead.findFirst({
         where: { id: leadId, deletedAt: null, ...leadScopeWhere(session) },
+        include: {
+          contacts: {
+            include: { contact: true },
+            orderBy: { isPrimary: "desc" },
+          },
+        },
       });
       if (!lead) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
+      const display = resolveDisplayName(lead.name, lead.contacts);
       const talks = await kommoApi.getTalks({
         entityId: lead.kommoId,
         onlyInWork: false,
       });
       return NextResponse.json({
-        lead: { id: lead.id, name: lead.name, kommoId: lead.kommoId },
+        lead: {
+          id: lead.id,
+          name: display.name,
+          phone: display.phone,
+          kommoId: lead.kommoId,
+        },
         talks: talks._embedded?.talks || [],
       });
     }
 
-    // Inbox: talks recientes de Kommo + asegurar leads locales (sin migración completa)
     const recentTalks = await kommoApi.getTalks({ onlyInWork: true });
     const talksList = recentTalks._embedded?.talks || [];
 
@@ -50,21 +74,40 @@ export async function GET(req: NextRequest) {
           const remote = await kommoApi.getLead(talk.entity_id);
           await upsertLead(remote);
         } catch {
-          // ignore lead fetch errors
+          // ignore
         }
       }
     }
 
     const myLeads = await prisma.lead.findMany({
       where: { deletedAt: null, ...leadScopeWhere(session) },
-      select: { id: true, name: true, kommoId: true },
+      include: {
+        contacts: {
+          include: { contact: true },
+          orderBy: { isPrimary: "desc" },
+        },
+      },
       take: 80,
       orderBy: { updatedAt: "desc" },
     });
 
-    const byKommoId = new Map(myLeads.map((l) => [l.kommoId, l]));
-    const inbox: Array<{ talk: KommoTalk; lead: { id: string; name: string; kommoId: number } }> =
-      [];
+    const leadOptions = myLeads.map((l) => {
+      const display = resolveDisplayName(l.name, l.contacts);
+      return {
+        id: l.id,
+        name: display.name,
+        phone: display.phone,
+        kommoId: l.kommoId,
+      };
+    });
+
+    const byKommoId = new Map(
+      leadOptions.map((l) => [l.kommoId, l] as const),
+    );
+    const inbox: Array<{
+      talk: KommoTalk;
+      lead: { id: string; name: string; phone: string | null; kommoId: number };
+    }> = [];
 
     for (const talk of talksList) {
       if (!talk.entity_id) continue;
@@ -73,9 +116,8 @@ export async function GET(req: NextRequest) {
       inbox.push({ talk, lead });
     }
 
-    // Fallback: si Kommo no devolvió talks globales, consultar por lead
     if (!inbox.length) {
-      for (const lead of myLeads.slice(0, 25)) {
+      for (const lead of leadOptions.slice(0, 25)) {
         const res = await kommoApi.getTalks({ entityId: lead.kommoId, onlyInWork: true });
         for (const talk of res._embedded?.talks || []) {
           inbox.push({ talk, lead });
@@ -84,7 +126,7 @@ export async function GET(req: NextRequest) {
     }
 
     inbox.sort((a, b) => (b.talk.updated_at || 0) - (a.talk.updated_at || 0));
-    return NextResponse.json({ inbox: inbox.slice(0, 50), leads: myLeads });
+    return NextResponse.json({ inbox: inbox.slice(0, 50), leads: leadOptions });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error chat";
     return NextResponse.json({ error: message }, { status: 400 });
