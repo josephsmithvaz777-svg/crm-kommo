@@ -8,6 +8,7 @@ type Talk = {
   status?: string;
   is_in_work?: boolean;
   updated_at?: number;
+  created_at?: number;
 };
 
 type InboxItem = {
@@ -27,6 +28,67 @@ type Message = {
 
 type LeadOption = { id: string; name: string; kommoId: number };
 
+/** Kommo usa unix seconds */
+function fromUnix(ts?: number | null) {
+  if (!ts || !Number.isFinite(ts)) return null;
+  const ms = ts > 1e12 ? ts : ts * 1000;
+  return new Date(ms);
+}
+
+function formatMessageTime(ts?: number | null) {
+  const d = fromUnix(ts);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: "America/Lima",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
+}
+
+function formatInboxTime(ts?: number | null) {
+  const d = fromUnix(ts);
+  if (!d) return "";
+  const now = new Date();
+  const sameDay =
+    d.toLocaleDateString("es-PE", { timeZone: "America/Lima" }) ===
+    now.toLocaleDateString("es-PE", { timeZone: "America/Lima" });
+  if (sameDay) {
+    return new Intl.DateTimeFormat("es-PE", {
+      timeZone: "America/Lima",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+  }
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: "America/Lima",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
+}
+
+function sortMessagesAsc(list: Message[]) {
+  return [...list].sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+}
+
+function dayKey(ts?: number | null) {
+  const d = fromUnix(ts);
+  if (!d) return "";
+  return d.toLocaleDateString("es-PE", {
+    timeZone: "America/Lima",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export function ChatWorkspace() {
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [leads, setLeads] = useState<LeadOption[]>([]);
@@ -40,6 +102,8 @@ export function ChatWorkspace() {
   const [live, setLive] = useState(false);
   const talkIdRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottom = useRef(true);
 
   useEffect(() => {
     talkIdRef.current = talkId;
@@ -52,7 +116,9 @@ export function ChatWorkspace() {
       setError(data.error || "No se pudo cargar el inbox");
       return;
     }
-    setInbox(data.inbox || []);
+    const items = (data.inbox || []) as InboxItem[];
+    items.sort((a, b) => (b.talk.updated_at || 0) - (a.talk.updated_at || 0));
+    setInbox(items);
     setLeads(data.leads || []);
     setError(null);
   }
@@ -71,7 +137,7 @@ export function ChatWorkspace() {
       }
       return;
     }
-    setMessages(data.messages || []);
+    setMessages(sortMessagesAsc(data.messages || []));
     if (!silent) setError(null);
     setLive(true);
   }
@@ -82,20 +148,21 @@ export function ChatWorkspace() {
     return () => clearInterval(inboxTimer);
   }, []);
 
-  // Mensajes en vivo desde Kommo (sin migración)
   useEffect(() => {
     if (!talkId) {
       setLive(false);
       return;
     }
+    stickToBottom.current = true;
     void refreshMessages(false);
     const msgTimer = setInterval(() => void refreshMessages(true), 3000);
     return () => clearInterval(msgTimer);
   }, [talkId]);
 
   useEffect(() => {
+    if (!stickToBottom.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -114,9 +181,11 @@ export function ChatWorkspace() {
       setTalks([]);
       return;
     }
-    setTalks(data.talks || []);
-    if (data.talks?.[0]) {
-      setTalkId(data.talks[0].talk_id);
+    const nextTalks = (data.talks || []) as Talk[];
+    nextTalks.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+    setTalks(nextTalks);
+    if (nextTalks[0]) {
+      setTalkId(nextTalks[0].talk_id);
     }
   }
 
@@ -129,6 +198,7 @@ export function ChatWorkspace() {
     if (!talkId || !text.trim()) return;
     setBusy(true);
     setError(null);
+    stickToBottom.current = true;
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -145,6 +215,8 @@ export function ChatWorkspace() {
       setBusy(false);
     }
   }
+
+  let lastDay = "";
 
   return (
     <div className="grid h-[calc(100dvh-7.5rem)] gap-4 lg:grid-cols-[280px_1fr]">
@@ -165,7 +237,12 @@ export function ChatWorkspace() {
                 talkId === item.talk.talk_id ? "bg-[var(--sand)]" : "hover:bg-[var(--sand)]/60"
               }`}
             >
-              <p className="font-medium text-[var(--ink)]">{item.lead.name}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-medium text-[var(--ink)]">{item.lead.name}</p>
+                <span className="shrink-0 text-[10px] text-[var(--muted)]">
+                  {formatInboxTime(item.talk.updated_at || item.talk.created_at)}
+                </span>
+              </div>
               <p className="text-xs text-[var(--muted)]">
                 {item.talk.origin || "canal"} · #{item.talk.talk_id}
               </p>
@@ -200,6 +277,7 @@ export function ChatWorkspace() {
               {talks.map((t) => (
                 <option key={t.talk_id} value={t.talk_id}>
                   {t.origin || "chat"} #{t.talk_id}
+                  {t.updated_at ? ` · ${formatInboxTime(t.updated_at)}` : ""}
                 </option>
               ))}
             </select>
@@ -220,30 +298,52 @@ export function ChatWorkspace() {
             )}
           </div>
           <p className="text-xs text-[var(--muted)]">
-            WhatsApp / Instagram / Facebook según canales en Kommo. La migración completa solo es
-            para la carga inicial de leads.
+            Orden cronológico · hora Perú (America/Lima)
           </p>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        <div
+          ref={listRef}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+          onScroll={() => {
+            const el = listRef.current;
+            if (!el) return;
+            stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          }}
+        >
           {messages.map((m) => {
             const mine = m.type === "outgoing";
+            const day = dayKey(m.created_at);
+            const showDay = day && day !== lastDay;
+            if (showDay) lastDay = day;
             return (
-              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
-                    mine
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-[var(--sand)] text-[var(--ink)]"
-                  }`}
-                >
-                  <p className="text-[10px] opacity-70">
-                    {m.author?.name || (mine ? "Tú" : "Cliente")}
-                    {m.origin ? ` · ${m.origin}` : ""}
+              <div key={m.id}>
+                {showDay && (
+                  <p className="mb-3 mt-1 text-center text-[11px] capitalize text-[var(--muted)]">
+                    {day}
                   </p>
-                  <p className="mt-0.5 whitespace-pre-wrap">
-                    {m.text || (m.attachment ? `[${m.attachment.type}]` : "")}
-                  </p>
+                )}
+                <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                      mine
+                        ? "bg-[var(--accent)] text-white"
+                        : "bg-[var(--sand)] text-[var(--ink)]"
+                    }`}
+                  >
+                    <p className="text-[10px] opacity-70">
+                      {m.author?.name || (mine ? "Tú" : "Cliente")}
+                      {m.origin ? ` · ${m.origin}` : ""}
+                    </p>
+                    <p className="mt-0.5 whitespace-pre-wrap">
+                      {m.text || (m.attachment ? `[${m.attachment.type}]` : "")}
+                    </p>
+                    {m.created_at ? (
+                      <p className={`mt-1 text-[10px] ${mine ? "text-white/70" : "text-[var(--muted)]"}`}>
+                        {formatMessageTime(m.created_at)}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             );

@@ -14,7 +14,10 @@ export async function GET(req: NextRequest) {
   try {
     if (talkId) {
       const messages = await kommoApi.getTalkMessages(Number(talkId));
-      return NextResponse.json({ messages: messages._embedded?.messages || [] });
+      const list = [...(messages._embedded?.messages || [])].sort(
+        (a, b) => (a.created_at || 0) - (b.created_at || 0),
+      );
+      return NextResponse.json({ messages: list });
     }
 
     if (leadId) {
