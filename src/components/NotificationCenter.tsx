@@ -16,19 +16,61 @@ type Notif = {
 
 type Toast = { id: string; title: string; body?: string; href?: string };
 
+const SOUND_KEY = "crm_alert_sound";
+
+/** Beep corto sin archivo externo (Web Audio API) */
+function playAlertSound() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(SOUND_KEY) === "off") return;
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+
+    const beep = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + start);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + dur + 0.02);
+    };
+
+    beep(880, 0, 0.12);
+    beep(1175, 0.14, 0.16);
+
+    setTimeout(() => void ctx.close(), 600);
+  } catch {
+    // ignore autoplay blocks until user interacts
+  }
+}
+
 export function NotificationCenter() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notif[]>([]);
   const [unread, setUnread] = useState(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [browserOk, setBrowserOk] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
   const seenIds = useRef<Set<string>>(new Set());
   const talkSeen = useRef<Record<string, number>>({});
   const bootstrapped = useRef(false);
 
-  function pushToast(t: Omit<Toast, "id">) {
+  useEffect(() => {
+    setSoundOn(localStorage.getItem(SOUND_KEY) !== "off");
+  }, []);
+
+  function pushToast(t: Omit<Toast, "id">, withSound = true) {
     const id = `${Date.now()}-${Math.random()}`;
     setToasts((prev) => [...prev.slice(-4), { ...t, id }]);
+    if (withSound) playAlertSound();
     setTimeout(() => {
       setToasts((prev) => prev.filter((x) => x.id !== id));
     }, 6000);
@@ -42,6 +84,7 @@ export function NotificationCenter() {
       const n = new Notification(title, {
         body: body || "",
         tag: href || title,
+        silent: false,
       });
       n.onclick = () => {
         window.focus();
@@ -67,19 +110,23 @@ export function NotificationCenter() {
       return;
     }
 
+    let played = false;
     for (const n of list) {
       if (seenIds.current.has(n.id) || n.readAt) continue;
       seenIds.current.add(n.id);
-      pushToast({
-        title: n.title,
-        body: n.body || undefined,
-        href: n.href || undefined,
-      });
+      pushToast(
+        {
+          title: n.title,
+          body: n.body || undefined,
+          href: n.href || undefined,
+        },
+        !played,
+      );
+      played = true;
       browserNotify(n.title, n.body || undefined, n.href || undefined);
     }
   }
 
-  /** Backup: actividad nueva en inbox de chat */
   async function watchInbox() {
     try {
       const res = await fetch("/api/chat");
@@ -121,12 +168,27 @@ export function NotificationCenter() {
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "granted") setBrowserOk(true);
     }
+
+    const softUnlock = () => {
+      try {
+        const Ctx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new Ctx();
+        void ctx.resume().then(() => ctx.close());
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener("pointerdown", softUnlock, { once: true });
+
     load();
     const a = setInterval(load, 5000);
     const b = setInterval(watchInbox, 10000);
     return () => {
       clearInterval(a);
       clearInterval(b);
+      window.removeEventListener("pointerdown", softUnlock);
     };
   }, []);
 
@@ -134,6 +196,13 @@ export function NotificationCenter() {
     if (!("Notification" in window)) return;
     const perm = await Notification.requestPermission();
     setBrowserOk(perm === "granted");
+  }
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem(SOUND_KEY, next ? "on" : "off");
+    if (next) playAlertSound();
   }
 
   async function markAll() {
@@ -178,6 +247,14 @@ export function NotificationCenter() {
             <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
               <p className="text-sm font-medium text-[var(--ink)]">Notificaciones</p>
               <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={toggleSound}
+                  className="text-[10px] text-[var(--muted)] underline"
+                  title={soundOn ? "Silenciar" : "Activar sonido"}
+                >
+                  {soundOn ? "Sonido" : "Mute"}
+                </button>
                 {!browserOk && (
                   <button
                     type="button"
