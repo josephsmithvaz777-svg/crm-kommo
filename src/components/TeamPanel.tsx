@@ -35,40 +35,68 @@ function EyeIcon({ off }: { off?: boolean }) {
 function PasswordField({
   value,
   onChange,
-  placeholder,
+  stored,
+  hasStored,
   required,
   className,
 }: {
   value: string;
   onChange: (value: string) => void;
-  placeholder?: string;
+  stored?: string | null;
+  hasStored?: boolean;
   required?: boolean;
   className?: string;
 }) {
   const [visible, setVisible] = useState(false);
+  const shown = (value || stored || "").trim();
+
+  function toggle() {
+    const next = !visible;
+    setVisible(next);
+    if (next && !value && stored) onChange(stored);
+  }
 
   return (
-    <div className="flex items-center gap-1">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${className || ""} ${visible ? "" : "password-masked"}`.trim()}
-        placeholder={placeholder}
-        minLength={required ? 6 : undefined}
-        required={required}
-        autoComplete="off"
-        spellCheck={false}
-      />
-      <button
-        type="button"
-        onClick={() => setVisible((v) => !v)}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--line)] text-[var(--ink)] hover:bg-[var(--sand)]"
-        title={visible ? "Ocultar contraseña" : "Ver contraseña"}
-        aria-label={visible ? "Ocultar contraseña" : "Ver contraseña"}
-      >
-        <EyeIcon off={visible} />
-      </button>
+    <div className="min-w-[13rem]">
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${className || ""} ${visible ? "" : "password-masked"}`.trim()}
+          placeholder={hasStored ? "Cambiar contraseña" : "Definir contraseña"}
+          minLength={required ? 6 : undefined}
+          required={required}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          onClick={toggle}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--line)] text-[var(--ink)] hover:bg-[var(--sand)]"
+          title={visible ? "Ocultar contraseña" : "Ver contraseña"}
+          aria-label={visible ? "Ocultar contraseña" : "Ver contraseña"}
+        >
+          <EyeIcon off={visible} />
+        </button>
+      </div>
+      {visible ? (
+        <p className="mt-1 max-w-[16rem] text-[11px] leading-snug">
+          {shown ? (
+            <>
+              Contraseña:{" "}
+              <span className="break-all font-mono font-semibold text-[var(--ink)]">{shown}</span>
+            </>
+          ) : hasStored ? (
+            <span className="text-amber-800">
+              Esta clave no se puede recuperar. Escríbela de nuevo y pulsa Guardar; después el ojo
+              sí la mostrará.
+            </span>
+          ) : (
+            <span className="text-[var(--muted)]">Aún no tiene contraseña.</span>
+          )}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -184,8 +212,8 @@ export function TeamPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--muted)]">
-        Agrega asesores, mira o cambia su contraseña con el icono de ojo, o elimínalos. Las claves
-        definidas antes de esta función hay que volver a guardarlas para poder verlas.
+        Agrega asesores o elimínalos. El ojo muestra la contraseña debajo del campo. Si dice que no
+        se puede recuperar, escribe una nueva y pulsa Guardar.
       </p>
       {error && <p className="text-sm text-red-700">{error}</p>}
       <form
@@ -222,7 +250,6 @@ export function TeamPanel() {
             <PasswordField
               value={newPassword}
               onChange={setNewPassword}
-              placeholder="mín. 6 caracteres"
               required
               className="w-full rounded border border-[var(--line)] px-2 py-1.5 text-sm text-[var(--ink)]"
             />
@@ -273,15 +300,10 @@ export function TeamPanel() {
                 </td>
                 <td className="px-3 py-2">
                   <PasswordField
-                    value={passwords[u.id] || u.passwordReveal || ""}
+                    value={passwords[u.id] || ""}
                     onChange={(value) => setPasswords((x) => ({ ...x, [u.id]: value }))}
-                    placeholder={
-                      u.hasPassword && !u.passwordReveal
-                        ? "•••••• (guardar de nuevo para verla)"
-                        : u.hasPassword
-                          ? "contraseña actual"
-                          : "definir"
-                    }
+                    stored={u.passwordReveal}
+                    hasStored={u.hasPassword}
                     className="w-36 rounded border border-[var(--line)] px-2 py-1 text-xs"
                   />
                 </td>
