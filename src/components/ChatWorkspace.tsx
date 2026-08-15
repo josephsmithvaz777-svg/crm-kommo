@@ -147,15 +147,15 @@ export function ChatWorkspace() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-      <aside className="rounded-xl border border-[var(--line)] bg-[var(--panel)]">
-        <div className="border-b border-[var(--line)] px-3 py-3">
+    <div className="grid h-[calc(100dvh-7.5rem)] gap-4 lg:grid-cols-[280px_1fr]">
+      <aside className="flex min-h-0 flex-col rounded-xl border border-[var(--line)] bg-[var(--panel)]">
+        <div className="shrink-0 border-b border-[var(--line)] px-3 py-3">
           <h2 className="text-sm font-medium text-[var(--ink)]">Conversaciones</h2>
           <p className="text-xs text-[var(--muted)]">
             En vivo desde Kommo · no hace falta migrar
           </p>
         </div>
-        <div className="max-h-[70vh] space-y-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
           {inbox.map((item) => (
             <button
               key={`${item.talk.talk_id}-${item.lead.id}`}
@@ -177,7 +177,7 @@ export function ChatWorkspace() {
             </p>
           )}
         </div>
-        <div className="border-t border-[var(--line)] p-3">
+        <div className="shrink-0 border-t border-[var(--line)] p-3">
           <label className="text-xs text-[var(--muted)]">Abrir chat de lead</label>
           <select
             value={selectedLeadId}
@@ -207,8 +207,8 @@ export function ChatWorkspace() {
         </div>
       </aside>
 
-      <section className="flex min-h-[70vh] flex-col rounded-xl border border-[var(--line)] bg-[var(--panel)]">
-        <div className="border-b border-[var(--line)] px-4 py-3">
+      <section className="flex min-h-0 flex-col rounded-xl border border-[var(--line)] bg-[var(--panel)]">
+        <div className="shrink-0 border-b border-[var(--line)] px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--ink)]">
               {talkId ? `Chat #${talkId}` : "Mensajes"}
@@ -225,7 +225,7 @@ export function ChatWorkspace() {
           </p>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {messages.map((m) => {
             const mine = m.type === "outgoing";
             return (
@@ -256,13 +256,13 @@ export function ChatWorkspace() {
           )}
         </div>
 
-        <div className="border-t border-[var(--line)] p-3">
+        <div className="shrink-0 border-t border-[var(--line)] bg-[var(--panel)] p-3">
           {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
           <div className="flex gap-2">
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
               disabled={!talkId || busy}
               placeholder={talkId ? "Escribe un mensaje..." : "Elige un chat primero"}
               className="flex-1 rounded-lg border border-[var(--line)] px-3 py-2 text-sm disabled:opacity-50"
