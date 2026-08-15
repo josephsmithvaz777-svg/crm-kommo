@@ -113,6 +113,13 @@ export function TeamPanel() {
   const [newRole, setNewRole] = useState<"agent" | "admin">("agent");
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!success) return;
+    const t = window.setTimeout(() => setSuccess(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [success]);
 
   async function load() {
     const res = await fetch("/api/users");
@@ -132,8 +139,11 @@ export function TeamPanel() {
     load();
   }, []);
 
-  async function save(userId: string, role?: string) {
+  async function save(userId: string, role?: string, notify = false) {
     setError(null);
+    setSuccess(null);
+    const savingPassword = Boolean(passwords[userId]);
+    const name = users.find((u) => u.id === userId)?.name || "el asesor";
     const res = await fetch("/api/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -149,11 +159,19 @@ export function TeamPanel() {
       setError(data.error || "No se pudo guardar");
       return;
     }
+    if (notify) {
+      setSuccess(
+        savingPassword
+          ? `Se ha guardado la contraseña de ${name}.`
+          : `Se guardaron los cambios de ${name}.`,
+      );
+    }
     await load();
   }
 
   async function createUser() {
     setError(null);
+    setSuccess(null);
     setCreating(true);
     try {
       const res = await fetch("/api/users", {
@@ -175,6 +193,7 @@ export function TeamPanel() {
       setNewEmail("");
       setNewPassword("");
       setNewRole("agent");
+      setSuccess("Se ha guardado la contraseña del nuevo usuario.");
       await load();
     } finally {
       setCreating(false);
@@ -216,6 +235,11 @@ export function TeamPanel() {
         se puede recuperar, escribe una nueva y pulsa Guardar.
       </p>
       {error && <p className="text-sm text-red-700">{error}</p>}
+      {success && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {success}
+        </p>
+      )}
       <form
         className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:grid-cols-[1fr_1fr_1.2fr_auto_auto] sm:items-end"
         onSubmit={(e) => {
@@ -322,7 +346,7 @@ export function TeamPanel() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => save(u.id)}
+                      onClick={() => save(u.id, undefined, true)}
                       className="rounded bg-[var(--accent)] px-3 py-1 text-xs text-white"
                     >
                       Guardar
