@@ -249,8 +249,9 @@ export function ChatWorkspace() {
   }, [talkId]);
 
   useEffect(() => {
-    if (!stickToBottom.current) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!stickToBottom.current || !listRef.current) return;
+    // Solo scroll del panel de mensajes (no de toda la página)
+    listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages]);
 
   useEffect(() => {
@@ -315,15 +316,15 @@ export function ChatWorkspace() {
     null;
 
   return (
-    <div className="grid h-[calc(100dvh-7.5rem)] gap-4 lg:grid-cols-[280px_1fr]">
-      <aside className="flex min-h-0 flex-col rounded-xl border border-[var(--line)] bg-[var(--panel)]">
-        <div className="shrink-0 border-b border-[var(--line)] px-3 py-3">
+    <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[280px_1fr]">
+      <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
+        <div className="shrink-0 border-b border-[var(--line)] px-3 py-2.5">
           <h2 className="text-sm font-medium text-[var(--ink)]">Conversaciones</h2>
           <p className="text-xs text-[var(--muted)]">
             En vivo desde Kommo · no hace falta migrar
           </p>
         </div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-2">
           {inbox.map((item) => {
             const unread = unreadMap[String(item.talk.talk_id)] || 0;
             const active = talkId === item.talk.talk_id;
@@ -336,25 +337,25 @@ export function ChatWorkspace() {
                 active ? "bg-[var(--sand)]" : "hover:bg-[var(--sand)]/60"
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <p className={`min-w-0 flex-1 truncate font-medium ${unread && !active ? "text-[var(--ink)]" : "text-[var(--ink)]"}`}>
-                  {item.lead.name}
-                </p>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-[var(--ink)]">{item.lead.name}</p>
+                  <p className="truncate text-xs text-[var(--muted)]">
+                    {item.lead.phone || item.talk.origin || "canal"}
+                    {` · #${item.lead.kommoId}`}
+                  </p>
+                </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span className="text-[10px] text-[var(--muted)]">
                     {formatInboxTime(item.talk.updated_at || item.talk.created_at)}
                   </span>
                   {unread > 0 && !active && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold leading-none text-white">
                       {unread > 99 ? "99+" : unread}
                     </span>
                   )}
                 </div>
               </div>
-              <p className="text-xs text-[var(--muted)]">
-                {item.lead.phone || item.talk.origin || "canal"}
-                {` · #${item.lead.kommoId}`}
-              </p>
             </button>
             );
           })}
@@ -396,15 +397,15 @@ export function ChatWorkspace() {
         </div>
       </aside>
 
-      <section className="flex min-h-0 flex-col rounded-xl border border-[var(--line)] bg-[var(--panel)]">
-        <div className="shrink-0 border-b border-[var(--line)] px-4 py-3">
+      <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
+        <div className="shrink-0 border-b border-[var(--line)] px-4 py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <div>
-              <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--ink)]">
+            <div className="min-w-0">
+              <h2 className="truncate font-[family-name:var(--font-display)] text-lg text-[var(--ink)]">
                 {selectedLead?.name || (talkId ? `Chat #${talkId}` : "Mensajes")}
               </h2>
               {selectedLead && (
-                <p className="text-xs text-[var(--muted)]">
+                <p className="truncate text-xs text-[var(--muted)]">
                   {selectedLead.phone ? `${selectedLead.phone} · ` : ""}
                   Lead #{selectedLead.kommoId}
                   {talkId ? ` · chat #${talkId}` : ""}
@@ -412,8 +413,8 @@ export function ChatWorkspace() {
               )}
             </div>
             {talkId && live && (
-              <span className="text-[10px] uppercase tracking-wide text-emerald-700">
-                Actualizando cada 3s
+              <span className="shrink-0 text-[10px] uppercase tracking-wide text-emerald-700">
+                En vivo
               </span>
             )}
           </div>
@@ -426,7 +427,7 @@ export function ChatWorkspace() {
 
         <div
           ref={listRef}
-          className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4"
           onScroll={() => {
             const el = listRef.current;
             if (!el) return;

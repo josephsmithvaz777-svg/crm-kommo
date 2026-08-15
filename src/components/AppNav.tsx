@@ -41,7 +41,7 @@ export function AppNav() {
 
   return (
     <header className="border-b border-[var(--line)] bg-[var(--panel)]/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-4 sm:px-6">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-3 sm:px-6">
         <Link
           href="/"
           className="font-[family-name:var(--font-display)] text-xl tracking-tight text-[var(--ink)]"
