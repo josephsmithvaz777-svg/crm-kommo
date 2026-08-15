@@ -163,7 +163,7 @@ export async function upsertLead(l: KommoLead) {
   const existing = await prisma.lead.findUnique({ where: { kommoId: l.id } });
   const keepCrmOwner = Boolean(existing?.crmAssigned);
 
-  const lead = await prisma.lead.upsert({
+  let lead = await prisma.lead.upsert({
     where: { kommoId: l.id },
     create: {
       kommoId: l.id,
@@ -202,11 +202,21 @@ export async function upsertLead(l: KommoLead) {
     },
   });
 
-  // Relación lead-contactos
+  // Relación lead-contactos (traer contacto si aún no está local)
   const contacts = l._embedded?.contacts || [];
+  let primaryContactName: string | null = null;
   for (const c of contacts) {
-    const contact = await prisma.contact.findUnique({ where: { kommoId: c.id } });
+    let contact = await prisma.contact.findUnique({ where: { kommoId: c.id } });
+    if (!contact) {
+      try {
+        const remote = await kommoApi.getContact(c.id);
+        contact = await upsertContact(remote);
+      } catch {
+        contact = null;
+      }
+    }
     if (!contact) continue;
+    if (c.is_main || !primaryContactName) primaryContactName = contact.name;
     await prisma.leadContact.upsert({
       where: { leadId_contactId: { leadId: lead.id, contactId: contact.id } },
       create: {
@@ -216,6 +226,16 @@ export async function upsertLead(l: KommoLead) {
       },
       update: { isPrimary: Boolean(c.is_main) },
     });
+  }
+
+  // Si Kommo puso "Lead #123", preferir el nombre del contacto principal
+  const genericName = /^lead\s*#?\s*\d+$/i.test(l.name.trim());
+  if (primaryContactName && genericName) {
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: { name: primaryContactName },
+    });
+    lead = { ...lead, name: primaryContactName };
   }
 
   // Lead nuevo → round-robin local (no requiere licencia Kommo extra)

@@ -6,6 +6,30 @@ import { LeadAssignSelect } from "@/components/LeadAssignSelect";
 
 export const dynamic = "force-dynamic";
 
+function formatEntryTime(d: Date | null | undefined) {
+  if (!d) return "—";
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: "America/Lima",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
+}
+
+function resolveLeadName(
+  leadName: string,
+  contacts: Array<{ isPrimary: boolean; contact: { name: string; phone: string | null } }>,
+) {
+  const primary =
+    contacts.find((c) => c.isPrimary)?.contact || contacts[0]?.contact || null;
+  const generic = /^lead\s*#?\s*\d+$/i.test(leadName.trim());
+  if (primary?.name && (generic || !leadName.trim())) return primary.name;
+  return leadName;
+}
+
 export default async function LeadsPage() {
   const session = await getSession();
   if (!session && process.env.AUTH_SETUP_OPEN !== "true") redirect("/login");
@@ -23,8 +47,12 @@ export default async function LeadsPage() {
       pipeline: true,
       responsible: true,
       company: true,
+      contacts: {
+        include: { contact: true },
+        orderBy: { isPrimary: "desc" },
+      },
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ kommoCreatedAt: "desc" }, { createdAt: "desc" }],
     take: 100,
   });
 
@@ -56,6 +84,7 @@ export default async function LeadsPage() {
           <thead className="border-b border-[var(--line)] text-xs uppercase tracking-wide text-[var(--muted)]">
             <tr>
               <th className="px-4 py-3">Nombre</th>
+              <th className="px-4 py-3">Entrada</th>
               <th className="px-4 py-3">Etapa</th>
               <th className="px-4 py-3">Asesor</th>
               <th className="px-4 py-3">Fuente</th>
@@ -64,35 +93,55 @@ export default async function LeadsPage() {
             </tr>
           </thead>
           <tbody>
-            {leads.map((lead) => (
-              <tr key={lead.id} className="border-b border-[var(--line)]/70 last:border-0">
-                <td className="px-4 py-3 font-medium text-[var(--ink)]">{lead.name}</td>
-                <td className="px-4 py-3 text-[var(--muted)]">{lead.stage?.name || "—"}</td>
-                <td className="px-4 py-3 text-[var(--muted)]">
-                  {isAdmin ? (
-                    <LeadAssignSelect
-                      leadId={lead.id}
-                      currentId={lead.responsibleId}
-                      users={assignees}
-                    />
-                  ) : (
-                    lead.responsible?.name || "—"
-                  )}
-                </td>
-                <td className="px-4 py-3 text-[var(--muted)]">{lead.source || "—"}</td>
-                <td className="px-4 py-3 text-[var(--ink)]">
-                  ${lead.price.toLocaleString("es-MX")}
-                </td>
-                <td className="px-4 py-3">
-                  <Link href={`/chat?leadId=${lead.id}`} className="text-[var(--accent)] underline">
-                    Abrir
-                  </Link>
-                </td>
-              </tr>
-            ))}
+            {leads.map((lead) => {
+              const displayName = resolveLeadName(lead.name, lead.contacts);
+              const phone =
+                lead.contacts.find((c) => c.isPrimary)?.contact.phone ||
+                lead.contacts[0]?.contact.phone ||
+                null;
+              const entryAt = lead.kommoCreatedAt || lead.createdAt;
+              return (
+                <tr key={lead.id} className="border-b border-[var(--line)]/70 last:border-0">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-[var(--ink)]">{displayName}</p>
+                    <p className="text-[11px] text-[var(--muted)]">
+                      #{lead.kommoId}
+                      {phone ? ` · ${phone}` : ""}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3 text-[var(--muted)] whitespace-nowrap">
+                    {formatEntryTime(entryAt)}
+                  </td>
+                  <td className="px-4 py-3 text-[var(--muted)]">{lead.stage?.name || "—"}</td>
+                  <td className="px-4 py-3 text-[var(--muted)]">
+                    {isAdmin ? (
+                      <LeadAssignSelect
+                        leadId={lead.id}
+                        currentId={lead.responsibleId}
+                        users={assignees}
+                      />
+                    ) : (
+                      lead.responsible?.name || "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-[var(--muted)]">{lead.source || "—"}</td>
+                  <td className="px-4 py-3 text-[var(--ink)]">
+                    ${lead.price.toLocaleString("es-MX")}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/chat?leadId=${lead.id}`}
+                      className="text-[var(--accent)] underline"
+                    >
+                      Abrir
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
             {!leads.length && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-[var(--muted)]">
+                <td colSpan={7} className="px-4 py-10 text-center text-[var(--muted)]">
                   Sin leads. Ejecuta la migración o espera webhooks / reparto.
                 </td>
               </tr>
