@@ -33,6 +33,7 @@ export function NotificationCenter() {
   const seenIds = useRef<Set<string>>(new Set());
   const talkSeen = useRef<Record<string, number>>({});
   const bootstrapped = useRef(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Forzar sonido ON si nunca se configuró (evita quedar en Mute sin querer)
@@ -151,6 +152,24 @@ export function NotificationCenter() {
   }
 
   useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "granted") setBrowserOk(true);
     }
@@ -255,7 +274,7 @@ export function NotificationCenter() {
 
   return (
     <>
-      <div className="relative shrink-0">
+      <div className="relative shrink-0" ref={rootRef}>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}

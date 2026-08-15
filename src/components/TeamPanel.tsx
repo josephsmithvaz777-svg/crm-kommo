@@ -13,6 +13,24 @@ type UserRow = {
   _count: { leads: number };
 };
 
+function EyeIcon({ off }: { off?: boolean }) {
+  if (off) {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M3 3l18 18" />
+        <path d="M10.6 10.6a2 2 0 002.8 2.8" />
+        <path d="M9.9 5.1A10.6 10.6 0 0121 12c-.7 1.2-1.6 2.3-2.6 3.2M6.1 6.1C4.6 7.4 3.3 9.1 2.5 12c1.7 4.5 6 7.5 9.5 7.5 1.6 0 3.2-.4 4.6-1.2" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M2.5 12C4.2 7.5 8.5 4.5 12 4.5S19.8 7.5 21.5 12C19.8 16.5 15.5 19.5 12 19.5S4.2 16.5 2.5 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 function PasswordField({
   value,
   onChange,
@@ -27,25 +45,36 @@ function PasswordField({
   className?: string;
 }) {
   const [visible, setVisible] = useState(false);
+  const [maskOk, setMaskOk] = useState(false);
+
+  useEffect(() => {
+    setMaskOk(typeof CSS !== "undefined" && CSS.supports("-webkit-text-security", "disc"));
+  }, []);
+
   return (
     <div className="flex items-center gap-1">
       <input
-        type={visible ? "text" : "password"}
+        type={visible || maskOk ? "text" : "password"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={className}
         placeholder={placeholder}
         minLength={required ? 6 : undefined}
         required={required}
-        autoComplete="new-password"
+        autoComplete="off"
+        data-lpignore="true"
+        data-1p-ignore="true"
+        spellCheck={false}
+        style={!visible && maskOk ? { WebkitTextSecurity: "disc" } : undefined}
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        className="shrink-0 rounded border border-[var(--line)] px-2 py-1 text-[10px] uppercase text-[var(--muted)]"
+        className="shrink-0 rounded border border-[var(--line)] p-1 text-[var(--muted)] hover:bg-[var(--sand)] hover:text-[var(--ink)]"
         title={visible ? "Ocultar contraseña" : "Ver contraseña"}
+        aria-label={visible ? "Ocultar contraseña" : "Ver contraseña"}
       >
-        {visible ? "Ocultar" : "Ver"}
+        <EyeIcon off={visible} />
       </button>
     </div>
   );
@@ -251,7 +280,7 @@ export function TeamPanel() {
                 </td>
                 <td className="px-3 py-2">
                   <PasswordField
-                    value={passwords[u.id] || ""}
+                    value={passwords[u.id] || u.passwordReveal || ""}
                     onChange={(value) => setPasswords((x) => ({ ...x, [u.id]: value }))}
                     placeholder={
                       u.hasPassword && !u.passwordReveal
